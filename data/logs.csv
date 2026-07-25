@@ -1,0 +1,8 @@
+timestamp,claim,verdict,confidence
+2026-07-25 18:07:46,une inondation a détruit plusieurs immeubles à Abidjan en juin 2026!,REFUTES,80.5726
+2026-07-25 18:19:16,le désert couvre plus de 80% du kenya!,NOT_ENOUGH_INFO,47.891926
+2026-07-25 18:24:30,la côte d'ivoire est un pays chaud!,SUPPORTS,63.57118
+2026-07-25 18:25:41,les inondations sont la coutume des japonais!,SUPPORTS,74.245834
+2026-07-25 18:26:34,le maroc  a remporté la coupe d'afrique 2025,SUPPORTS,58.061172
+2026-07-25 18:45:20,le maroc a remporté la CAN 2025!,NOT_ENOUGH_INFO,0.0
+2026-07-25 18:46:18,la côte d'ivoire est un pays chaud!,SUPPORTS,63.57118

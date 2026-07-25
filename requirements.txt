@@ -1,0 +1,12 @@
+datasets
+pandas
+sentence-transformers
+faiss-cpu
+scikit-learn
+streamlit
+google-generativeai
+joblib
+fastapi
+uvicorn
+deep-translator
+PyPDF2

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+node_modules/
+.DS_Store
+Models_saved/
+models_saved/*.bin
+models_saved/*.joblib
+frontend/node_modules/
+frontend/dist/

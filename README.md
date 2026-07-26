@@ -1,10 +1,9 @@
-# 🌍 TERRAVA-AI : Plateforme d'Intelligence et de Fact-Checking Climatique
+ 🌍 TERRAVA-AI : Plateforme d'Intelligence et de Fact-Checking Climatique
 
 **TERRAVA-AI** (anciennement ClimaCheck) est un outil de vérification des faits (fact-checking) propulsé par l'Intelligence Artificielle. Conçu spécifiquement pour les journalistes, chercheurs et décideurs climatiques, il permet de confronter instantanément une déclaration aux données officielles de la littérature scientifique (GIEC, OMM, Banque Mondiale) afin de lutter contre la désinformation climatique.
 
----
 
-## ✨ Fonctionnalités Principales
+  Fonctionnalités Principales
 
 - **Détection Anti-Désinformation :** Évalue si une affirmation est `CONFIRMÉE`, `RÉFUTÉE` ou `NON VÉRIFIABLE` par la science.
 - **Architecture Zéro-GPU :** Modèle hybride ultra-optimisé combinant une base vectorielle (FAISS) et un classifieur de Machine Learning (Random Forest) capable de tourner sur un simple ordinateur CPU local.
@@ -12,13 +11,12 @@
 - **Analyse de Documents (PDF) :** Importez un document par Glisser-Déposer pour extraire instantanément le texte et lancer l'analyse.
 - **Filtre Régional :** Focus spécifique sur l'Afrique de l'Ouest et la Côte d'Ivoire.
 
----
 
-## 🏗️ Architecture Technique (SaaS)
+ Architecture Technique (SaaS)
 
 Le projet a été refondu pour adopter un standard industriel **Full-Stack** :
 
-### 1. Le "Cerveau" : Back-End (Python / FastAPI)
+ 1. Le "Cerveau" : Back-End (Python / FastAPI)
 L'API REST est exposée via `main.py` et orchestre :
 - L'encodeur de similarité sémantique (`all-MiniLM-L6-v2`).
 - La base de connaissances vectorielle (`FAISS`).
@@ -31,15 +29,14 @@ Une interface moderne "Scientific Workbench" gérée dans le dossier `/frontend`
 - Composants stylisés sur-mesure via **Tailwind CSS**.
 - Design épuré, accessible et totalement exempt de jargon technique.
 
----
 
-## 🚀 Guide d'Installation et d'Exécution
+ Guide d'Installation et d'Exécution
 
-### Prérequis
+ Prérequis
 - **Python 3.9+** (Pour l'API IA)
 - **Node.js 18+** (Pour l'interface React)
 
-### Étape 1 : Lancer le Serveur IA (Back-End)
+ Étape 1 : Lancer le Serveur IA (Back-End)
 
 ```bash
 # Dans le dossier principal du projet :
@@ -66,7 +63,7 @@ npm run dev
 
 ---
 
-## ⚙️ Les Scripts de Modélisation (MLOps)
+ Les Scripts de Modélisation (MLOps)
 Ce dépôt inclut également les scripts ayant servi à la conception de l'IA (idéal pour la mise à jour des rapports) :
 - `1_prepare_data.py` : Scrape et structure les données des rapports bruts.
 - `2_build_retrieval.py` : Indexe les données dans la base vectorielle FAISS.

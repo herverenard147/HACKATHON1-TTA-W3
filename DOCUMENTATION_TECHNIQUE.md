@@ -33,14 +33,14 @@ Ce document décrit l'état **réel et vérifié** du projet (code exécuté, m�
 
 ## 2. Stack technique et choix
 
-| Composant | Choix | Pourquoi |
-|---|---|---|
-| Backend | **FastAPI** (async) | API REST légère, documentation OpenAPI automatique (`/docs`), validation de schéma via Pydantic, adaptée à un service CPU mono-modèle sans besoin de queue/worker complexe. |
-| Recherche vectorielle | **FAISS `IndexFlatIP`** | Recherche exacte (pas d'approximation ANN) adaptée à un corpus de taille modeste (~4870 vecteurs) : latence négligeable, aucun compromis de rappel. `IndexFlatIP` (produit scalaire) sur vecteurs normalisés = équivalent exact de la similarité cosinus. |
-| Encodeur sémantique | **SentenceTransformers `all-MiniLM-L6-v2`** | 22M paramètres, 384 dimensions, tourne en quelques millisecondes par phrase sur CPU. Compromis qualité/vitesse standard pour de la recherche sémantique légère, pas de dépendance GPU. |
-| Classificateur | **Régression Logistique scikit-learn** (`class_weight='balanced'`, `C=0.1`, `max_iter=1000`) | Modèle linéaire interprétable, entraînement en secondes sur CPU, pas de risque d'overfitting catastrophique avec une régularisation adaptée (voir section 6 sur le choix de `C`). |
-| Frontend | **React + Vite + TypeScript + Tailwind CSS** | SPA légère, hot-reload rapide en développement, typage statique pour réduire les erreurs d'intégration avec l'API. |
-| Parsing PDF | **PyPDF2** | Extraction de texte suffisante pour préremplir le champ de saisie depuis un document déposé par l'utilisateur ; pas besoin d'OCR pour ce cas d'usage. |
+| Composant             | Choix                                                                                        | Pourquoi                                                                                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend               | **FastAPI** (async)                                                                          | API REST légère, documentation OpenAPI automatique (`/docs`), validation de schéma via Pydantic, adaptée à un service CPU mono-modèle sans besoin de queue/worker complexe.                                                                               |
+| Recherche vectorielle | **FAISS `IndexFlatIP`**                                                                      | Recherche exacte (pas d'approximation ANN) adaptée à un corpus de taille modeste (~4870 vecteurs) : latence négligeable, aucun compromis de rappel. `IndexFlatIP` (produit scalaire) sur vecteurs normalisés = équivalent exact de la similarité cosinus. |
+| Encodeur sémantique   | **SentenceTransformers `all-MiniLM-L6-v2`**                                                  | 22M paramètres, 384 dimensions, tourne en quelques millisecondes par phrase sur CPU. Compromis qualité/vitesse standard pour de la recherche sémantique légère, pas de dépendance GPU.                                                                    |
+| Classificateur        | **Régression Logistique scikit-learn** (`class_weight='balanced'`, `C=0.1`, `max_iter=1000`) | Modèle linéaire interprétable, entraînement en secondes sur CPU, pas de risque d'overfitting catastrophique avec une régularisation adaptée (voir section 6 sur le choix de `C`).                                                                         |
+| Frontend              | **React + Vite + TypeScript + Tailwind CSS**                                                 | SPA légère, hot-reload rapide en développement, typage statique pour réduire les erreurs d'intégration avec l'API.                                                                                                                                        |
+| Parsing PDF           | **PyPDF2**                                                                                   | Extraction de texte suffisante pour préremplir le champ de saisie depuis un document déposé par l'utilisateur ; pas besoin d'OCR pour ce cas d'usage.                                                                                                     |
 
 ---
 
@@ -59,6 +59,7 @@ features = concat(c_emb, e_emb, abs_diff, elementwise_mult)   # 1536 dims
 ```
 
 Interprétation :
+
 - `c_emb`, `e_emb` : information brute des deux textes.
 - `abs_diff` : capture la divergence terme-à-terme entre les deux représentations (utile pour détecter une contradiction directionnelle).
 - `elementwise_mult` : capture le chevauchement / l'alignement sémantique (proche de la similarité cosinus mais dimension par dimension, avant agrégation).
@@ -91,14 +92,14 @@ Ce seuil a été vérifié expérimentalement en phase 1 : une phrase en coréen
 
 ⚠️ **L'ordre ci-dessous est important.** `data/corpus.csv` est déjà fourni dans ce dépôt en version enrichie (Climate-FEVER + documents institutionnels + métadonnées). Relancer `1_prepare_data.py` seul **écrase** cette version enrichie par une version brute sans métadonnées ni documents institutionnels.
 
-| Ordre | Script | Rôle |
-|---|---|---|
-| 1 | `1_prepare_data.py` | Télécharge Climate-FEVER (HuggingFace `datasets`) et génère `train.csv`/`val.csv`/`test.csv` + un `corpus.csv` **brut** (colonne `evidence` seule). |
-| 2 | `migrate_csv.py` | Ajoute les colonnes `institution`/`title`/`year`/`url` au corpus brut. **Obligatoire avant l'étape 4.** |
-| 3 | `2_build_retrieval.py` | Encode `corpus.csv` et construit l'index FAISS (`models_saved/faiss_index.bin`). |
-| 4 | `4_ingest_documents.py` | Ajoute les documents institutionnels (GIEC, OMM, Banque Mondiale) au corpus avec métadonnées, reconstruit l'index FAISS. |
-| 5 *(optionnel)* | `update_corpus.py` | Fusionne `corpus_additionnel.csv` (affirmations régionales additionnelles) et reconstruit l'index FAISS. |
-| — | `3_train_classifier.py` | Entraîne la Régression Logistique sur `train.csv` + `val.csv`, évalue une seule fois sur `test.csv`. Indépendant du corpus/FAISS. |
+| Ordre           | Script                  | Rôle                                                                                                                                                |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1               | `1_prepare_data.py`     | Télécharge Climate-FEVER (HuggingFace `datasets`) et génère `train.csv`/`val.csv`/`test.csv` + un `corpus.csv` **brut** (colonne `evidence` seule). |
+| 2               | `migrate_csv.py`        | Ajoute les colonnes `institution`/`title`/`year`/`url` au corpus brut. **Obligatoire avant l'étape 4.**                                             |
+| 3               | `2_build_retrieval.py`  | Encode `corpus.csv` et construit l'index FAISS (`models_saved/faiss_index.bin`).                                                                    |
+| 4               | `4_ingest_documents.py` | Ajoute les documents institutionnels (GIEC, OMM, Banque Mondiale) au corpus avec métadonnées, reconstruit l'index FAISS.                            |
+| 5 *(optionnel)* | `update_corpus.py`      | Fusionne `corpus_additionnel.csv` (affirmations régionales additionnelles) et reconstruit l'index FAISS.                                            |
+| —               | `3_train_classifier.py` | Entraîne la Régression Logistique sur `train.csv` + `val.csv`, évalue une seule fois sur `test.csv`. Indépendant du corpus/FAISS.                   |
 
 ---
 
@@ -108,23 +109,23 @@ Ce seuil a été vérifié expérimentalement en phase 1 : une phrase en coréen
 
 ### Résultat final (modèle en production, `models_saved/classifier.joblib`)
 
-| Métrique | Valeur mesurée |
-|---|---|
-| **Macro-F1** | **0.532** |
-| F1 — SUPPORTS | 0.638 |
-| F1 — NOT_ENOUGH_INFO | 0.518 |
-| F1 — REFUTES | 0.440 |
-| Accuracy | 0.562 |
+| Métrique             | Valeur mesurée |
+| -------------------- | -------------- |
+| **Macro-F1**         | **0.532**      |
+| F1 — SUPPORTS        | 0.638          |
+| F1 — NOT_ENOUGH_INFO | 0.518          |
+| F1 — REFUTES         | 0.440          |
+| Accuracy             | 0.562          |
 
 ### Historique des itérations (mesurées, pas estimées)
 
-| Configuration | Macro-F1 test |
-|---|---|
-| Baseline initiale (`C=1.0` défaut, entraîné sur train seul) | 0.482 |
-| `C=0.1` (grid search sur val), entraîné sur train seul | 0.516 |
-| `C=0.1`, entraîné sur train+val (config finale déployée) | **0.532** |
-| Calibration Platt (`CalibratedClassifierCV`, sigmoid) sur `C=0.1` | 0.461 *(rejetée — dégrade)* |
-| **Baseline de comparaison : TF-IDF** (mêmes 4 blocs de features, mêmes réglages, `max_features=2000`) | 0.485 |
+| Configuration                                                                                         | Macro-F1 test               |
+| ----------------------------------------------------------------------------------------------------- | --------------------------- |
+| Baseline initiale (`C=1.0` défaut, entraîné sur train seul)                                           | 0.482                       |
+| `C=0.1` (grid search sur val), entraîné sur train seul                                                | 0.516                       |
+| `C=0.1`, entraîné sur train+val (config finale déployée)                                              | **0.532**                   |
+| Calibration Platt (`CalibratedClassifierCV`, sigmoid) sur `C=0.1`                                     | 0.461 *(rejetée — dégrade)* |
+| **Baseline de comparaison : TF-IDF** (mêmes 4 blocs de features, mêmes réglages, `max_features=2000`) | 0.485                       |
 
 La baseline TF-IDF (vectorisation lexicale classique, sans embeddings sémantiques) atteint 0.485 avec le même pipeline de classification — l'encodeur `all-MiniLM-L6-v2` apporte un gain réel mais modeste (+0.047 absolu) par rapport à une approche purement lexicale, sur ce jeu de données.
 
@@ -149,6 +150,7 @@ Le corpus institutionnel (GIEC, OMM, Banque Mondiale) ne représente que **3 chu
 ## 7. Installation et lancement
 
 ### Prérequis
+
 - Python 3.9+ (testé avec 3.12.3)
 - Node.js 18+
 
@@ -185,71 +187,38 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 ## 8. Limitations techniques connues
 
 - **Corpus institutionnel quasi-absent de l'entraînement** : 3 chunks sur ~4870 dans le corpus de récupération (GIEC, OMM, Banque Mondiale), 0 dans les données labellisées train/val/test. L'apport réel du focus régional Afrique de l'Ouest/Côte d'Ivoire au *raisonnement* du classificateur est donc nul — il n'agit qu'au niveau de la récupération de sources à afficher.
-- **Priorisation régionale limitée par la couverture du lexique** : `zone_geo` (voir section 10) ne peut repondérer que les sources dont l'evidence mentionne une entité géographique reconnue par le même lexique que `relevance_filter.py` — les mêmes limites de couverture lexicale s'appliquent (section 8, filtre de cohérence à l'affichage).
+
+- **Filtre régional cosmétique** : le sélecteur de zone géographique (`zone_geo`) de l'interface est transmis à l'API mais n'est pas exploité par `check_claim()` — la recherche FAISS reste globale quelle que soit la zone sélectionnée.
+
 - **Lien d'archive limité aux documents connus** : les 2 documents institutionnels locaux (Banque Mondiale, OMM) sont désormais servis via `/documents/<fichier>` (backend, `StaticFiles`). Le document GIEC pointe vers une URL externe réelle (`ipcc.ch`) mais le fichier local correspondant (`data/climate_docs/GIEC_AR6_Afrique_Resume.pdf`) est en réalité un texte de simulation (limitation déjà documentée : le téléchargement réel du PDF n'a jamais été effectué par `4_ingest_documents.py`, qui écrit un texte de substitution avec l'extension `.pdf`) — cliquer sur ce lien externe mène au vrai site du GIEC, pas nécessairement à la page exacte citée.
+
 - **Sources thématiquement/géographiquement non pertinentes possibles (partiellement atténué)** : le seuil de 0.20 filtre les cas hors-sujet extrêmes, mais entre 0.20 et ~0.55 le système peut retenir une source qui partage un vocabulaire climatique générique avec le claim sans rapport géographique ou thématique réel avec lui. Exemple mesuré : pour une question portant sur une hausse localisée des précipitations dans un quartier d'Abidjan sur une période de deux ans, une des sources renvoyées porte sur la sécheresse dans la Corne de l'Afrique (score cosinus mesuré : 0.32, au-dessus du seuil, mais sans lien géographique — pays différent — ni thématique — sécheresse contre excès de pluie — avec la question). Ce n'est pas un cas isolé : sur 8 affirmations hyper-locales testées (villes différentes, phénomènes climatiques différents), aucune ne tombe sous 0.20, et certaines remontent même des extraits Climate-FEVER totalement hors sujet climatique (un extrait sur une pièce de théâtre classique a été retourné avec un score de 0.42 pour une question sur le paludisme lié à la chaleur). Cette limite tient à la nature du filtrage par similarité d'embeddings : la proximité sémantique globale (vocabulaire climatique commun) ne garantit pas la pertinence contextuelle précise (même lieu, même phénomène).
-
+  
   **Filtre de cohérence à l'affichage (`relevance_filter.py`)** : un contrôle léger a été ajouté, appliqué **uniquement à l'affichage des sources, après que le verdict est déjà déterminé** — il ne touche ni au seuil de 0.20 ni à la classification. Un lexique d'une trentaine d'entités géographiques (villes/pays/régions d'Afrique de l'Ouest et au-delà, avec expansion ville → pays, ex. "Cocody" implique "Côte d'Ivoire") et thématiques (pluie, température, sécheresse, inondation, chaleur, paludisme, niveau de la mer, etc.) est comparé entre le claim et chaque evidence retournée. Si le claim contient au moins une entité reconnaissable et qu'**aucune** ne se retrouve dans l'evidence, la source est marquée `relevance_uncertain: true` côté API et affichée avec un badge "Pertinence géographique/thématique incertaine" côté interface — elle n'est **pas masquée** (choix délibéré : masquer risquerait de faire disparaître les 3 sources d'un coup dans certains cas, ce qui contredirait la "Traçabilité Totale" mise en avant comme fonctionnalité, et serait moins simple à implémenter sans cas limite). Si le claim ne contient aucune entité reconnaissable par le lexique, aucun filtrage n'est appliqué (par choix, pour ne jamais masquer d'information par excès de prudence).
+  
+  **Décision géo/thème séparée (depuis la phase de correction dédiée)** : le chevauchement n'est plus vérifié sur un ensemble combiné géo+thème (ce qui laissait un simple mot-clé thématique partagé, ex. "chaleur", suffire à ne pas marquer une source même quand la géographie diffère réellement — cas observé : une source sur la Somalie n'était pas marquée incertaine pour une question sur le paludisme lié à la chaleur à Bouaké). La règle actuelle (`is_relevance_uncertain`) traite les deux signaux séparément : **si le claim contient au moins une entité géographique reconnue, c'est elle seule qui décide** (chevauchement géo requis, un thème partagé seul ne suffit plus à sauver une source géographiquement hors-sujet) ; le signal thématique ne décide seul que lorsque le claim ne contient **aucune** entité géographique reconnue. Vérifié par exécution réelle : le cas Somalie/Bouaké est désormais correctement marqué `relevance_uncertain: true`, tandis que le cas de référence Cocody/Banque Mondiale (géographie commune — Côte d'Ivoire — thème différent, pluie contre température) reste correctement non marqué.
 
-  Limites assumées de ce filtre : (1) couverture lexicale nécessairement incomplète (toutes les villes/phénomènes ne sont pas listés) ; (2) le chevauchement est vérifié sur l'ensemble combiné géo+thème, pas séparément par catégorie — un simple mot-clé thématique partagé (ex. "chaleur") peut donc suffire à ne pas marquer une source même quand la géographie diffère réellement (exemple observé : une source sur la Somalie n'est pas marquée incertaine pour une question sur le paludisme lié à la chaleur à Bouaké, car les deux textes mentionnent "chaleur"). Ce choix est volontaire : une vérification stricte par catégorie casserait le cas inverse qu'on veut au contraire préserver (une source Banque Mondiale sur la température en Côte d'Ivoire doit rester jugée pertinente pour une question sur la pluie à Cocody, grâce au recouvrement géographique, même si le thème précis diffère). Le filtre réduit donc le bruit le plus flagrant (sources totalement hors-sujet géographique et thématique, comme le cas Somalie/Cocody ou l'extrait littéraire hors-climat) sans garantir une détection exhaustive de toute non-pertinence partielle.
+  Limites assumées de ce filtre : (1) couverture lexicale nécessairement incomplète (toutes les villes/phénomènes ne sont pas listés) ; (2) **nouvelle limite introduite par la priorité donnée au signal géo** : un claim citant un pays face à une source ne citant qu'une région plus large non reliée dans le lexique (ex. "Côte d'Ivoire" dans le claim contre "Afrique subsaharienne" dans l'evidence du GIEC, sans lien ville→pays→région dans `CITY_TO_COUNTRY`) est désormais marqué "incertain" même si la source est en réalité pertinente à l'échelle régionale — testé et confirmé (`is_relevance_uncertain` renvoie `True` pour ce couple). Impact pratique limité : c'est le seul chunk du corpus dans ce cas (le chunk GIEC), et son rang de similarité cosinus pure est très bas (#493 sur ~4870 pour un claim générique testé), donc il apparaît rarement dans le top-k affiché en pratique. Une hiérarchie pays→région a été envisagée pour combler cet écart mais écartée : elle aurait aussi fait remonter des régions non comparables (ex. Somalie/Corne de l'Afrique regroupée avec l'Afrique de l'Ouest sous un même méta-groupe continental), ce qui aurait cassé le cas Somalie/Bouaké que cette correction vise justement à détecter — un compromis jugé pire que la limite actuelle, plus étroite et documentée.
+
 - **Granularité du corpus** : GIEC/OMM/Banque Mondiale documentent des tendances macro (nationales, régionales, mondiales, sur plusieurs décennies). Le système ne peut structurellement pas confirmer ou infirmer une statistique hyper-locale et récente (ex. "+80% de pluie en 2 ans dans un quartier précis") — ce type d'affirmation, pourtant fréquent dans la désinformation climatique qui circule sur les réseaux sociaux en Afrique de l'Ouest, tombe presque systématiquement en `NON VÉRIFIABLE` par manque de preuve directe, ce qui est le comportement correct mais peut donner l'impression d'un système peu utile sur ce type de cas précis.
+
 - **Pas de calibration efficace** : testée (Platt scaling) et écartée car elle dégrade le Macro-F1 (section 6). Les scores de confiance affichés ne sont donc pas de vraies probabilités calibrées.
+
 - **Pas de support multilingue structuré** : le corpus mélange français (documents institutionnels, `corpus_additionnel.csv`) et anglais (Climate-FEVER). `all-MiniLM-L6-v2` gère raisonnablement les deux langues en pratique mais aucune stratégie de traduction ou d'alignement cross-lingue n'est mise en œuvre — la qualité de la récupération pour une langue non représentée dans le corpus n'est pas garantie.
+
 - **Classe REFUTES la plus faible** (F1=0.44) : voir section 6, confusion fréquente avec SUPPORTS quand claim et evidence portent sur le même sujet mais avec un signe opposé — limite connue d'un classificateur basé uniquement sur la proximité d'embeddings, sans modélisation explicite de la négation.
+
 - **Corpus FAISS statique** : aucune ingestion continue ; toute mise à jour nécessite de relancer manuellement le pipeline (section 5).
+
 - **Dépendances non pinnées dans les fichiers `legacy/`** : `api.py`/`app.py` (prototypes obsolètes) ne font pas partie du chemin de production et ne sont pas couverts par les garanties ci-dessus (voir `legacy/README.md`).
 
 ---
 
 ## 9. Pistes d'amélioration futures
 
-- **Affiner le filtre de cohérence géographique/thématique** (implémenté, voir section 8) : passer d'une simple présence/absence lexicale à une vérification par catégorie (geo et thème séparément) pour détecter aussi les cas de recouvrement thématique fortuit sans recouvrement géographique réel (ex. cas Somalie/Bouaké encore non détecté aujourd'hui, section 8) ; élargir le lexique au-delà des ~35 entités actuelles ; envisager une reconnaissance d'entités nommées (NER) légère plutôt qu'un lexique statique si la couverture devient un problème récurrent.
-- **Élargir le corpus institutionnel** : au-delà des 3 chunks actuels, ingérer davantage de rapports GIEC/OMM/Banque Mondiale complets (pas de simulation de téléchargement) pour que le focus régional (`zone_geo`, section 10) ait davantage de contenu pertinent à mettre en avant.
-- **Étendre `zone_geo` au-delà d'une repondération** (implémenté, voir section 10) : envisager, une fois le corpus institutionnel élargi, une vraie restriction géographique optionnelle (plutôt qu'un simple boost) pour les cas où l'utilisateur veut explicitement exclure le contenu hors-zone — actuellement volontairement exclu pour ne jamais renvoyer 0 source sur un corpus aussi réduit.
+- **Affiner encore le filtre de cohérence géographique/thématique** (décision géo/thème séparée déjà implémentée, voir section 8) : envisager une hiérarchie géographique à plusieurs niveaux (ville→pays→région) plutôt qu'un seul niveau, pour couvrir le cas pays-vs-région-plus-large encore marqué à tort aujourd'hui (ex. Côte d'Ivoire vs GIEC/Afrique subsaharienne, section 8) sans casser la détection Somalie/Bouaké — nécessiterait une hiérarchie plus fine que "un pays appartient à une seule région" (ex. pondération décroissante par niveau plutôt qu'un simple ensemble d'ancêtres) pour éviter que des régions non comparables finissent regroupées ; élargir le lexique au-delà des ~35 entités actuelles ; envisager une reconnaissance d'entités nommées (NER) légère plutôt qu'un lexique statique si la couverture devient un problème récurrent.
+- **Élargir le corpus institutionnel** : au-delà des 3 chunks actuels, ingérer davantage de rapports GIEC/OMM/Banque Mondiale complets (pas de simulation de téléchargement) pour que le focus régional annoncé ait un effet réel sur la couverture des sources.
+- **Implémenter le filtre régional** (`zone_geo`) côté backend, par exemple en repondérant ou restreignant la recherche FAISS aux documents tagués pour la zone sélectionnée.
 - **Explorer un jeu de données REFUTES plus riche** ou des techniques d'augmentation ciblées sur cette classe, seule à rester sous 0.5 de F1.
 - **Ingestion continue du corpus** plutôt qu'un index FAISS statique reconstruit manuellement.
 - **Stratégie multilingue explicite** (traduction automatique du claim vers la langue dominante du corpus avant recherche, ou corpus francophone étoffé) plutôt que de compter sur la robustesse cross-lingue implicite de l'encodeur.
-- **Export/partage du verdict** (implémenté en texte formaté, voir section 11) : ajouter une option d'export image (badge + claim + sources sous forme de visuel PNG) pour les canaux où une image capte davantage l'attention qu'un texte collé (ex. story Instagram/statut WhatsApp) — nécessiterait une librairie de rendu image côté client (ex. génération canvas), non ajoutée pour l'instant pour rester sans nouvelle dépendance.
-
----
-
-## 10. Priorisation régionale des sources (`zone_geo`)
-
-`zone_geo` (transmis par le sélecteur de zone de l'interface, ou en texte libre côté API) permet de **repondérer** — jamais de filtrer en dur — les sources institutionnelles/régionales pertinentes pour la zone demandée par l'utilisateur.
-
-**Point d'intégration** : un second passage strictement **après** le choix du top-1 utilisé pour le seuil anti-hallucination (section 4) et la classification NLI, qui restent inchangés quel que soit `zone_geo`. Ce choix garantit que `zone_geo` ne peut jamais faire basculer un verdict — il affecte uniquement quelles sources complémentaires sont mises en avant dans le top-k affiché. C'est la même logique déjà appliquée au filtre de cohérence à l'affichage (`relevance_filter.py`, section 8) : les deux mécanismes interviennent après la décision, jamais dedans.
-
-**Mécanisme** :
-1. Le claim et `zone_geo` sont d'abord passés à `extract_entities()` (le même lexique géo/thème que `relevance_filter.py`, réutilisé tel quel — pas de second lexique).
-2. Si `zone_geo` ne contient aucune entité géographique reconnue (valeur par défaut "Global (International)", faute de frappe, zone hors lexique), **aucune repondération n'a lieu** : le comportement est structurellement identique à l'ancien code (mêmes indices FAISS, même ordre).
-3. Sinon, un re-scan complet du corpus (`index.search(c_emb, len(corpus_df))` — peu coûteux vu la taille actuelle du corpus, ~4870 lignes) ajoute `ZONE_GEO_BOOST = 0.15` au score cosinus de chaque candidat dont l'evidence recoupe au moins une entité de `zone_geo`, puis retrie et reprend le top-k pour l'affichage.
-
-**Vérifié par exécution réelle** (claim générique et ambigu, "Les températures moyennes augmentent fortement à cause du changement climatique.") :
-- Sans `zone_geo` : sources = `[Banque Mondiale (score top-1 0.729), Climate-FEVER, Climate-FEVER]`.
-- Avec `zone_geo="Côte d'Ivoire"` : sources = `[Banque Mondiale, Organisation Météorologique Mondiale (mentionne Abidjan/Afrique de l'Ouest), Climate-FEVER]` — le verdict et le score du top-1 restent identiques dans les deux cas.
-- Avec `zone_geo` non reconnu (ex. faute de frappe) : sources identiques au cas sans `zone_geo`.
-
-**Limites** : la repondération ne peut promouvoir que les 3 chunks institutionnels existants (corpus quasi exclusivement Climate-FEVER, section 8) ; elle hérite des limites de couverture du même lexique que `relevance_filter.py` (entités non listées jamais reconnues) ; le re-scan complet du corpus à chaque requête avec `zone_geo` reconnu n'est acceptable que parce que le corpus reste petit (~4870 lignes) — une stratégie différente (index géo-taggé séparé, par exemple) serait nécessaire si le corpus grossissait significativement.
-
----
-
-## 11. Export et partage du verdict
-
-Objectif : permettre de faire circuler un résultat de vérification aussi vite que la désinformation qu'il corrige, sur les canaux où elle se propage (WhatsApp, Facebook, X).
-
-**Option retenue** : texte formaté copiable, plutôt qu'une image générée. Choix justifié par le cadre technique existant :
-- Aucune nouvelle dépendance (pas de librairie de rendu image/canvas à ajouter).
-- Aucun stockage backend nécessaire (pas de lien partageable persistant, ce qui aurait demandé une nouvelle table/DB non présente actuellement — explicitement exclu sans validation préalable).
-- Fonctionne à l'identique sur desktop et mobile, sans dépendre d'un navigateur capable de générer un fichier image côté client.
-
-**Implémentation** (`frontend/src/components/VerdictCard.tsx`) : un bouton "Partager" construit un texte formaté (emoji, claim d'origine, verdict, synthèse, jusqu'à 2 sources principales avec extrait tronqué proprement à une limite de mots — jamais au milieu d'un mot ou d'une phrase — et nom de l'institution) puis :
-1. Utilise l'API native `navigator.share()` si disponible (mobile : ouvre directement le menu de partage du système, WhatsApp/X/etc. y apparaissent) ;
-2. Sinon, copie le texte dans le presse-papier (`navigator.clipboard.writeText`) avec confirmation visuelle ("Copié !").
-
-Le claim d'origine est rattaché côté frontend au résultat au moment de la réponse de l'API (`setResult({ ...data, claim: text })`, dans `App.tsx`) car l'API `check-claim` ne renvoie pas elle-même le claim vérifié.
-
-**Vérifié par exécution réelle** (logique de génération testée directement contre de vraies réponses de l'API, sur les deux verdicts) :
-- Cas CONFIRMÉ (Côte d'Ivoire/Banque Mondiale) : texte de 965 caractères, 2 sources incluses, aucune troncature au milieu d'un mot.
-- Cas NON VÉRIFIABLE (score < 0.20, zéro source) : texte de 435 caractères, section "Sources" correctement omise plutôt que laissée vide.
-
-**Limites** : pas d'option image (voir section 9, piste future) ; pas de lien partageable persistant (nécessiterait un stockage backend, hors périmètre actuel) ; `navigator.share()` n'est pas disponible sur tous les navigateurs desktop (repli automatique sur le presse-papier dans ce cas, mais pas testé sur l'ensemble des navigateurs/OS).

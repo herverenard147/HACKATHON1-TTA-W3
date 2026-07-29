@@ -11,6 +11,16 @@ et qu'aucune ne se retrouve dans l'evidence, la source est marquée comme
 "pertinence incertaine" (elle reste affichée - voir DOCUMENTATION_TECHNIQUE.md
 pour la justification de ce choix plutôt que de la masquer).
 
+Décision géo/thème (séparés, pas un simple ensemble combiné) : quand le claim
+contient au moins une entité GÉOGRAPHIQUE reconnue, c'est ELLE qui décide
+(un chevauchement thématique seul, ex. "chaleur" partagé entre un claim sur
+la Côte d'Ivoire et une source sur la Somalie, ne suffit plus à couvrir un
+vrai écart géographique). Le thème ne décide seul que si le claim ne contient
+AUCUNE entité géographique reconnue. Voir DOCUMENTATION_TECHNIQUE.md section 8
+pour la justification et les limites de ce choix (notamment le cas d'un pays
+face à une source décrivant seulement une région plus large non reliée dans
+le lexique).
+
 Limites assumées (documentées) : couverture lexicale forcément incomplète
 (toutes les villes/phénomènes ne sont pas listés) ; un claim qui ne contient
 aucune entité reconnaissable par ce lexique n'est jamais filtré, par choix
@@ -95,34 +105,63 @@ def _normalize(text: str) -> str:
     return text
 
 
-def extract_entities(text: str) -> set:
-    """Retourne l'ensemble des identifiants canoniques (géo + thème) détectés dans `text`."""
-    if not text:
-        return set()
-    normalized = _normalize(text)
+def _match_entities(normalized_text: str, lexicon: list) -> set:
     found = set()
-    for canonical_id, surface_forms in ALL_ENTITIES:
+    for canonical_id, surface_forms in lexicon:
         for form in surface_forms:
-            if re.search(r"\b" + re.escape(form) + r"\b", normalized):
+            if re.search(r"\b" + re.escape(form) + r"\b", normalized_text):
                 found.add(canonical_id)
                 break
-    # Expansion ville -> pays (voir CITY_TO_COUNTRY).
+    return found
+
+
+def extract_geo_entities(text: str) -> set:
+    """Entités géographiques uniquement (avec expansion ville -> pays, voir CITY_TO_COUNTRY)."""
+    if not text:
+        return set()
+    found = _match_entities(_normalize(text), GEO_ENTITIES)
     for city_id in list(found):
         if city_id in CITY_TO_COUNTRY:
             found.add(CITY_TO_COUNTRY[city_id])
     return found
 
 
+def extract_theme_entities(text: str) -> set:
+    """Entités thématiques (phénomènes climatiques) uniquement."""
+    if not text:
+        return set()
+    return _match_entities(_normalize(text), THEME_ENTITIES)
+
+
+def extract_entities(text: str) -> set:
+    """Union géo + thème (utilisée par main.py pour la repondération zone_geo,
+    qui n'a besoin que de savoir si une entité quelconque est partagée)."""
+    return extract_geo_entities(text) | extract_theme_entities(text)
+
+
 def is_relevance_uncertain(claim: str, evidence: str) -> bool:
     """
-    True si le claim contient au moins une entité géo/thème reconnaissable et
-    qu'aucune ne se retrouve dans l'evidence (source probablement hors-sujet
-    malgré un score cosinus au-dessus du seuil). False si le claim ne contient
-    aucune entité reconnaissable (on ne filtre jamais dans ce cas) ou s'il y a
-    un chevauchement.
+    Décision en deux signaux séparés (géo, thème), pas un ensemble combiné :
+
+    - Si le claim contient au moins une entité GÉOGRAPHIQUE reconnue, c'est ce
+      signal qui décide seul : la source est "incertaine" si aucune entité
+      géographique du claim ne se retrouve dans l'evidence, même si un
+      thème est partagé (ex. "chaleur" commun à une source sur la Somalie et
+      un claim sur la Côte d'Ivoire ne suffit plus à la sauver).
+    - Sinon (claim sans entité géo reconnue), c'est le signal THÉMATIQUE qui
+      décide : "incertaine" si aucun thème du claim ne se retrouve dans
+      l'evidence.
+    - Si le claim ne contient ni entité géo ni entité thème reconnue, jamais
+      filtré (choix délibéré, inchangé : on ne masque pas d'information par
+      excès de prudence sur un claim que le lexique ne sait pas interpréter).
     """
-    claim_entities = extract_entities(claim)
-    if not claim_entities:
+    claim_geo = extract_geo_entities(claim)
+    if claim_geo:
+        evidence_geo = extract_geo_entities(evidence)
+        return claim_geo.isdisjoint(evidence_geo)
+
+    claim_theme = extract_theme_entities(claim)
+    if not claim_theme:
         return False
-    evidence_entities = extract_entities(evidence)
-    return claim_entities.isdisjoint(evidence_entities)
+    evidence_theme = extract_theme_entities(evidence)
+    return claim_theme.isdisjoint(evidence_theme)

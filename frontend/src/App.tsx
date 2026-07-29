@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar';
 import ClaimInput from './components/ClaimInput';
 import VerdictCard from './components/VerdictCard';
 import SourcesAccordion from './components/SourcesAccordion';
+import { API_BASE_URL } from './config';
 
 export default function App() {
   const [claim, setClaim] = useState("");
@@ -18,7 +19,7 @@ export default function App() {
     setResult(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/check-claim", {
+      const response = await fetch(`${API_BASE_URL}/api/check-claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ claim: text, zone_geo: zoneGeo })
@@ -38,7 +39,7 @@ export default function App() {
     formData.append("file", file);
     
     try {
-      const response = await fetch("http://localhost:8000/api/upload-pdf", {
+      const response = await fetch(`${API_BASE_URL}/api/upload-pdf`, {
         method: "POST",
         body: formData
       });

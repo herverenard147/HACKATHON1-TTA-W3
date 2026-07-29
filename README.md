@@ -47,6 +47,8 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 *L'API est désormais disponible sur `http://localhost:8000/docs`.*
 
+> ⚠️ **Le port 8000 est parfois déjà utilisé par un autre service local** (observé sur certaines machines : un autre projet écoutant sur ce port). Si `uvicorn` refuse de démarrer avec une erreur `address already in use`, relancez-le sur un autre port (ex. `--port 8001`) et configurez le frontend en conséquence — voir ci-dessous.
+
 ### Étape 2 : Lancer l'Interface Graphique (Front-End)
 
 ```bash
@@ -56,10 +58,17 @@ cd frontend
 # Installer les dépendances
 npm install
 
+# (Optionnel) Si le backend ne tourne pas sur le port 8000 par défaut :
+cp .env.example .env
+# puis éditez frontend/.env et définissez VITE_API_BASE_URL sur l'URL réelle
+# de votre backend, ex. VITE_API_BASE_URL=http://localhost:8001
+
 # Lancer le serveur de développement React
 npm run dev
 ```
 *Le portail TERRAVA-AI s'ouvrira sur `http://localhost:5173`.*
+
+L'URL de l'API backend appelée par le frontend est configurable via la variable d'environnement `VITE_API_BASE_URL` (fichier `frontend/.env`, non commité — voir `frontend/.env.example`). Par défaut, en l'absence de ce fichier, le frontend appelle `http://localhost:8000`. **`frontend/.env` doit être adapté à chaque machine** si le port 8000 y est indisponible ; ne codez jamais l'URL du backend en dur dans le code source (`frontend/src/config.ts` centralise cette valeur).
 
 ---
 

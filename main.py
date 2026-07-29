@@ -393,6 +393,60 @@ def submit_feedback(request: FeedbackRequest):
     return {"feedback_id": feedback_id}
 
 
+MAX_BATCH_CLAIMS = 20  # limite défensive : évite qu'un collage géant ne rende une seule requête trop lente
+
+
+class BatchClaimRequest(BaseModel):
+    text: str  # plusieurs affirmations, une par ligne (voir check_claims_batch)
+    zone_geo: str = "Global (International)"
+    comprehension_level: str = "intermediaire"
+    user_id: Optional[str] = None
+
+
+class BatchResultItem(BaseModel):
+    claim: str
+    result: VerificationResponse
+
+
+@app.post("/api/check-claims-batch", response_model=List[BatchResultItem])
+def check_claims_batch(request: BatchClaimRequest):
+    """
+    Vérifie plusieurs affirmations en une requête. Découpage volontairement
+    simple : une ligne non vide = une affirmation (pas de segmentation NLP
+    par phrase). Limite connue et assumée : une affirmation rédigée sur
+    plusieurs lignes serait scindée à tort en plusieurs claims séparés, et
+    plusieurs affirmations courtes sur une même ligne seraient traitées comme
+    une seule - à l'utilisateur de coller un texte avec une affirmation par
+    ligne pour un découpage correct.
+
+    Chaque ligne suit EXACTEMENT le même pipeline complet qu'une vérification
+    simple : cette fonction appelle check_claim() ligne par ligne (même
+    fonction, pas de logique dupliquée ni de raccourci) - seuil
+    anti-hallucination, classification, filtre de pertinence et niveau de
+    compréhension s'appliquent identiquement à chaque claim du lot.
+    """
+    lines = [line.strip() for line in request.text.split("\n") if line.strip()]
+    if not lines:
+        raise HTTPException(status_code=400, detail="Aucune affirmation détectée (texte vide).")
+    if len(lines) > MAX_BATCH_CLAIMS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trop d'affirmations dans le lot ({len(lines)}) : maximum {MAX_BATCH_CLAIMS} par requête."
+        )
+
+    results = []
+    for line in lines:
+        claim_request = ClaimRequest(
+            claim=line,
+            zone_geo=request.zone_geo,
+            comprehension_level=request.comprehension_level,
+            user_id=request.user_id,
+        )
+        verdict = check_claim(claim_request)
+        results.append(BatchResultItem(claim=line, result=verdict))
+    return results
+
+
 @app.post("/api/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
     # La casse de l'extension n'est pas fiable comme signal de format : de

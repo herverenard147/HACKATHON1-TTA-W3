@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { History } from 'lucide-react';
+import { History, Layers } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ClaimInput from './components/ClaimInput';
 import VerdictCard from './components/VerdictCard';
 import SourcesAccordion from './components/SourcesAccordion';
 import HistoryPanel from './components/HistoryPanel';
+import BatchPanel from './components/BatchPanel';
 import { API_BASE_URL } from './config';
 import { getUserId } from './userId';
 
@@ -16,6 +17,7 @@ export default function App() {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [showBatch, setShowBatch] = useState(false);
   const [userId] = useState(getUserId);
 
   const handleVerify = async (text: string) => {
@@ -79,15 +81,31 @@ export default function App() {
               <h1 className="text-3xl font-extrabold tracking-tight mb-2">Analyse Climatique</h1>
               <p className="text-[#64748B] text-lg">Vérifiez la validité scientifique d'une déclaration par rapport aux données du GIEC et de l'OMM.</p>
             </div>
-            <button
-              onClick={() => setShowHistory(true)}
-              className="flex items-center gap-2 bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all shrink-0"
-            >
-              <History className="w-4 h-4" /> Mon historique
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setShowBatch(true)}
+                className="flex items-center gap-2 bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all"
+              >
+                <Layers className="w-4 h-4" /> Vérification par lot
+              </button>
+              <button
+                onClick={() => setShowHistory(true)}
+                className="flex items-center gap-2 bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all"
+              >
+                <History className="w-4 h-4" /> Mon historique
+              </button>
+            </div>
           </header>
 
           {showHistory && <HistoryPanel userId={userId} onClose={() => setShowHistory(false)} />}
+          {showBatch && (
+            <BatchPanel
+              zoneGeo={zoneGeo}
+              comprehensionLevel={comprehensionLevel}
+              userId={userId}
+              onClose={() => setShowBatch(false)}
+            />
+          )}
 
           <ClaimInput claim={claim} setClaim={setClaim} onVerify={handleVerify} isLoading={isVerifying} />
           

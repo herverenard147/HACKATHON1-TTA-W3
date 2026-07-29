@@ -262,3 +262,16 @@ Chaque vérification effectuée avec un `user_id` (transmis par le client, voir 
 ### Feedback utilisateur (👍/👎)
 
 Chaque verdict affiché propose un bouton 👍/👎, actif uniquement si la vérification a été sauvegardée dans l'historique (`verification_id` renvoyé par `check_claim`, donc uniquement si `user_id` a été fourni). `POST /api/feedback` (`{verification_id, user_id, rating}`, `rating` ∈ `{"up","down"}`) enregistre le retour dans la même base SQLite (`history_store.py`, table `feedback`, clé étrangère vers `verifications.id` — un `verification_id` inexistant est rejeté en 404). **Simplement collecté pour l'instant, non exploité** : aucune boucle de ré-entraînement ni tableau de bord ne consomme encore ces données — piste d'amélioration future (section 9).
+
+### Vérification par lot
+
+`POST /api/check-claims-batch` accepte un `text` (plusieurs affirmations collées) et renvoie un verdict complet par affirmation. **Découpage volontairement simple : une ligne non vide = une affirmation**, pas de segmentation NLP par phrase. Limite assumée (angle mort évident, documentée plutôt que masquée) : une affirmation rédigée sur plusieurs lignes serait scindée à tort en plusieurs claims séparés, et plusieurs affirmations courtes sur une même ligne seraient traitées comme une seule. Limite de 20 affirmations par lot (`MAX_BATCH_CLAIMS`), défensive contre un collage démesuré.
+
+**Aucun raccourci sur le pipeline** : chaque ligne appelle directement `check_claim()` (la même fonction Python que la route `/api/check-claim`, pas une copie ni une version simplifiée) — seuil anti-hallucination à 0.20, classification NLI, filtre de cohérence géo/thème et niveau de compréhension s'appliquent identiquement à chaque affirmation du lot, y compris la sauvegarde en historique si `user_id` est fourni.
+
+**Vérifié par exécution réelle**, lot de 3 affirmations de nature différente :
+- *"En Côte d'Ivoire, la Banque Mondiale prévoit une hausse des températures."* → `CONFIRMÉ PAR LES DONNÉES SCIENTIFIQUES` (3 sources)
+- *"The rate of warming according to the data is much slower than the models used by the IPCC"* (exemple réel étiqueté REFUTES dans `test.csv`) → `RÉFUTÉ / DÉSINFORMATION` (3 sources)
+- *"???!!!###"* (hors-sujet, score < 0.20) → `AUCUNE PREUVE SCIENTIFIQUE` (0 source)
+
+Chacune a reçu un `verification_id` distinct et séquentiel, confirmant que chaque affirmation a bien traversé le pipeline complet et a été sauvegardée séparément dans l'historique.

@@ -4,10 +4,12 @@ import { Globe, UploadCloud, CheckCircle2 } from 'lucide-react';
 interface SidebarProps {
   zoneGeo: string;
   setZoneGeo: (zone: string) => void;
+  comprehensionLevel: string;
+  setComprehensionLevel: (level: string) => void;
   onPdfUpload: (file: File) => void;
 }
 
-export default function Sidebar({ zoneGeo, setZoneGeo, onPdfUpload }: SidebarProps) {
+export default function Sidebar({ zoneGeo, setZoneGeo, comprehensionLevel, setComprehensionLevel, onPdfUpload }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -57,6 +59,21 @@ export default function Sidebar({ zoneGeo, setZoneGeo, onPdfUpload }: SidebarPro
           <option>Global (International)</option>
           <option>Afrique de l'Ouest</option>
           <option>Côte d'Ivoire</option>
+        </select>
+      </div>
+
+      {/* Niveau de compréhension */}
+      <div className="mb-10">
+        <label className="block text-sm font-bold text-[#1E293B] uppercase tracking-wide mb-3">🎓 Niveau de compréhension</label>
+        <select
+          value={comprehensionLevel}
+          onChange={(e) => setComprehensionLevel(e.target.value)}
+          className="w-full bg-[#F8FAFC] border border-[#CBD5E1] rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#059669]/20 focus:border-[#059669] transition-all cursor-pointer"
+        >
+          <option value="débutant">Débutant</option>
+          <option value="intermédiaire">Intermédiaire</option>
+          <option value="amateur">Amateur</option>
+          <option value="expert">Expert</option>
         </select>
       </div>
 

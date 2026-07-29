@@ -10,6 +10,7 @@ import joblib
 import PyPDF2
 import io
 import os
+import unicodedata
 from typing import List, Optional
 from relevance_filter import is_relevance_uncertain, extract_entities
 
@@ -56,10 +57,84 @@ app.add_middleware(
 if os.path.isdir("data/climate_docs"):
     app.mount("/documents", StaticFiles(directory="data/climate_docs"), name="documents")
 
+COMPREHENSION_LEVELS = {"debutant", "intermediaire", "amateur", "expert"}
+
+
+def normalize_comprehension_level(level: str) -> str:
+    """Normalise un niveau de compréhension libre vers l'un des 4 niveaux
+    canoniques ; retombe sur "intermediaire" si non reconnu (comportement
+    par défaut inchangé, jamais d'erreur pour une valeur inattendue)."""
+    if not level:
+        return "intermediaire"
+    normalized = unicodedata.normalize("NFKD", level.strip().lower()).encode("ascii", "ignore").decode("ascii")
+    return normalized if normalized in COMPREHENSION_LEVELS else "intermediaire"
+
+
+def build_analyse_text(verdict_bucket: str, level: str, similarity_score: float,
+                        raw_verdict: Optional[str] = None,
+                        probabilities: Optional[dict] = None,
+                        nb_sources: int = 0):
+    """
+    Formate le texte d'analyse (et, pour amateur/expert, des détails
+    techniques) selon le niveau de compréhension, à partir d'un verdict DÉJÀ
+    décidé — cette fonction ne relance JAMAIS la classification ni le calcul
+    du score : verdict_bucket/similarity_score/raw_verdict/probabilities lui
+    sont passés tels quels par check_claim(), qui ne les calcule qu'une
+    seule fois. Un seul verdict, quatre présentations.
+    """
+    templates = {
+        "CONFIRME": {
+            "debutant": "✅ Cette affirmation est confirmée ! Les scientifiques du climat sont d'accord avec ce qui est dit ici. Cette information vient de sources fiables (comme le GIEC ou l'OMM), donc vous pouvez lui faire confiance.",
+            "intermediaire": "L'information soumise est exacte et validée par le consensus scientifique actuel. Les recherches climatiques corroborent formellement cette dynamique. Ces observations soulignent la nécessité d'intégrer ces risques dans les plans d'adaptation locaux et les politiques de résilience.",
+            "amateur": "L'information soumise est exacte et validée par le consensus scientifique actuel. Le système l'a comparée à {nb_sources} source(s) institutionnelle(s), avec un score de similarité sémantique de {score:.2f} entre la déclaration et la source la plus proche (le seuil minimal pour considérer une correspondance valide est de 0.20).",
+            "expert": "Verdict : SUPPORTS (classification NLI). Score cosinus top-1 : {score:.4f} (seuil anti-hallucination : 0.20, franchi). Probabilités par classe : {proba_str}. Nombre de sources retenues pour l'affichage : {nb_sources}.",
+        },
+        "REFUTE": {
+            "debutant": "❌ Cette affirmation est fausse. Les données scientifiques sur le climat montrent le contraire de ce qui est dit ici. Attention à ne pas partager cette information sans la corriger.",
+            "intermediaire": "L'information soumise est inexacte ou trompeuse. Les données climatologiques démentent formellement cette déclaration. Il est crucial de corriger cette communication afin de ne pas fausser l'évaluation des vulnérabilités climatiques.",
+            "amateur": "L'information soumise est inexacte ou trompeuse. Le système l'a comparée à {nb_sources} source(s) institutionnelle(s), avec un score de similarité sémantique de {score:.2f} entre la déclaration et la source la plus proche.",
+            "expert": "Verdict : REFUTES (classification NLI). Score cosinus top-1 : {score:.4f} (seuil anti-hallucination : 0.20, franchi). Probabilités par classe : {proba_str}. Nombre de sources retenues pour l'affichage : {nb_sources}.",
+        },
+        "INSUFFISANT": {
+            "debutant": "⚠️ On ne peut pas dire si c'est vrai ou faux avec certitude. Les documents scientifiques parlent d'un sujet proche, mais ne répondent pas exactement à cette question précise. Regardez les sources ci-dessous pour vous faire votre propre idée.",
+            "intermediaire": "Les documents institutionnels (GIEC, OMM, etc.) traitent de sujets connexes, mais ils ne permettent pas de confirmer ou de réfuter explicitement et directement cette affirmation précise. Une analyse humaine des documents sourcés ci-dessous est recommandée.",
+            "amateur": "Les documents institutionnels traitent de sujets connexes sans trancher explicitement. Le système a consulté {nb_sources} source(s), avec un score de similarité sémantique de {score:.2f} (au-dessus du seuil de 0.20, mais le classificateur n'a pas identifié de confirmation ou de réfutation nette).",
+            "expert": "Verdict : NOT_ENOUGH_INFO (classification NLI). Score cosinus top-1 : {score:.4f} (seuil anti-hallucination : 0.20, franchi). Probabilités par classe : {proba_str}. Nombre de sources retenues pour l'affichage : {nb_sources}.",
+        },
+        "AUCUNE_PREUVE": {
+            "debutant": "⚠️ Aucune source scientifique ne parle de ce sujet précis. On ne peut donc pas vérifier cette affirmation avec les documents disponibles — méfiance.",
+            "intermediaire": "Aucune source institutionnelle ne mentionne ou ne justifie cette affirmation. En l'absence de données fiables et directes issues de la littérature scientifique officielle (GIEC, OMM, rapports nationaux), cette déclaration est considérée comme totalement infondée.",
+            "amateur": "Aucune source institutionnelle suffisamment proche n'a été trouvée : le score de similarité sémantique le plus élevé obtenu ({score:.2f}) reste sous le seuil minimal de 0.20, en-deçà duquel le système refuse de statuer plutôt que de risquer une réponse non fondée.",
+            "expert": "Verdict : NON_VERIFIABLE (seuil anti-hallucination). Score cosinus top-1 : {score:.4f}, sous le seuil de 0.20 — le classificateur n'est pas invoqué dans ce cas (aucune probabilité de classe disponible). Nombre de sources retenues pour l'affichage : 0 (par construction, sous le seuil).",
+        },
+    }
+
+    proba_str = "non disponible (classificateur non invoqué)"
+    if probabilities:
+        proba_str = ", ".join(f"{cls}={p:.3f}" for cls, p in probabilities.items())
+
+    text = templates[verdict_bucket][level].format(score=similarity_score, nb_sources=nb_sources, proba_str=proba_str)
+
+    technical_details = None
+    if level in ("amateur", "expert"):
+        technical_details = {
+            "similarity_score": round(similarity_score, 4),
+            "nb_sources_consulted": nb_sources,
+        }
+        if level == "expert":
+            technical_details["raw_nli_class"] = raw_verdict
+            technical_details["class_probabilities"] = (
+                {cls: round(p, 4) for cls, p in probabilities.items()} if probabilities else None
+            )
+
+    return text, technical_details
+
+
 # Modèles de données
 class ClaimRequest(BaseModel):
     claim: str
     zone_geo: str = "Global (International)"
+    comprehension_level: str = "intermediaire"
 
 class Source(BaseModel):
     institution: str
@@ -79,6 +154,10 @@ class VerificationResponse(BaseModel):
     badge_text: str
     analyse_text: str
     sources: List[Source]
+    # Détails techniques (score cosinus, classe NLI brute, probabilités par
+    # classe) : uniquement peuplé pour les niveaux "amateur"/"expert" (voir
+    # build_analyse_text). None pour "debutant"/"intermediaire".
+    technical_details: Optional[dict] = None
 
 # Variables globales pour l'IA
 embedding_model = None
@@ -114,40 +193,53 @@ def check_claim(request: ClaimRequest):
         similarity_score = float(distances[0][0])
         
         # Filtre anti-hallucination (Seuil de tolérance à 0.20 comme décidé)
+        raw_verdict = None
+        probabilities = None
         if similarity_score < 0.20:
             verdict = "NON_VERIFIABLE"
         else:
             e_emb = embedding_model.encode([top_evidence], normalize_embeddings=True)
             features = np.hstack((c_emb, e_emb, np.abs(c_emb - e_emb), c_emb * e_emb))
-            raw_verdict = classifier.predict(features)[0]
-            
+            raw_verdict = str(classifier.predict(features)[0])
+            # str()/float() : predict()/predict_proba() renvoient des types
+            # numpy (numpy.str_, numpy.float32), non sérialisables tels quels
+            # par Pydantic dans la réponse JSON (technical_details, niveau
+            # "expert") — convertis en types Python natifs dès leur calcul.
+            probabilities = {
+                str(cls): float(p)
+                for cls, p in zip(classifier.classes_, classifier.predict_proba(features)[0])
+            }
+
             if raw_verdict == "SUPPORTS":
                 verdict = "CONFIRME"
             elif raw_verdict == "REFUTES":
                 verdict = "REFUTE"
             else:
                 verdict = "NON_VERIFIABLE"
-                
-        # Formatage de la réponse selon le verdict
+
+        # Détermination du badge et du "bucket" de verdict (utilisé ensuite
+        # par build_analyse_text pour choisir le bon texte selon le niveau de
+        # compréhension). Le verdict lui-même (CONFIRME/REFUTE/NON_VERIFIABLE)
+        # est déjà figé ci-dessus et ne dépend en rien du niveau demandé.
         if verdict == "CONFIRME":
             badge_class = "badge-confirmed"
             badge_icon = "✅"
             badge_text = "CONFIRMÉ PAR LES DONNÉES SCIENTIFIQUES"
-            analyse_text = "L'information soumise est exacte et validée par le consensus scientifique actuel. Les recherches climatiques corroborent formellement cette dynamique. Ces observations soulignent la nécessité d'intégrer ces risques dans les plans d'adaptation locaux et les politiques de résilience."
+            verdict_bucket = "CONFIRME"
         elif verdict == "REFUTE":
             badge_class = "badge-refuted"
             badge_icon = "❌"
             badge_text = "RÉFUTÉ / DÉSINFORMATION"
-            analyse_text = "L'information soumise est inexacte ou trompeuse. Les données climatologiques démentent formellement cette déclaration. Il est crucial de corriger cette communication afin de ne pas fausser l'évaluation des vulnérabilités climatiques."
+            verdict_bucket = "REFUTE"
         else:
             badge_class = "badge-insufficient"
             badge_icon = "⚠️"
             if similarity_score >= 0.20:
                 badge_text = "PREUVES INDIRECTES / INSUFFISANTES"
-                analyse_text = "Les documents institutionnels (GIEC, OMM, etc.) traitent de sujets connexes, mais ils ne permettent pas de confirmer ou de réfuter explicitement et directement cette affirmation précise. Une analyse humaine des documents sourcés ci-dessous est recommandée."
+                verdict_bucket = "INSUFFISANT"
             else:
                 badge_text = "AUCUNE PREUVE SCIENTIFIQUE"
-                analyse_text = "Aucune source institutionnelle ne mentionne ou ne justifie cette affirmation. En l'absence de données fiables et directes issues de la littérature scientifique officielle (GIEC, OMM, rapports nationaux), cette déclaration est considérée comme totalement infondée."
+                verdict_bucket = "AUCUNE_PREUVE"
 
         # Préparation des sources
         sources = []
@@ -198,12 +290,22 @@ def check_claim(request: ClaimRequest):
                     relevance_uncertain=is_relevance_uncertain(request.claim, evidence_text)
                 ))
 
+        # Couche de formatage selon le niveau de compréhension : le verdict
+        # (verdict_bucket), le score et les probabilités sont déjà figés
+        # ci-dessus, calculés une seule fois quel que soit le niveau demandé.
+        level = normalize_comprehension_level(request.comprehension_level)
+        analyse_text, technical_details = build_analyse_text(
+            verdict_bucket, level, similarity_score,
+            raw_verdict=raw_verdict, probabilities=probabilities, nb_sources=len(sources)
+        )
+
         return VerificationResponse(
             badge_class=badge_class,
             badge_icon=badge_icon,
             badge_text=badge_text,
             analyse_text=analyse_text,
-            sources=sources
+            sources=sources,
+            technical_details=technical_details
         )
 
     except Exception as e:

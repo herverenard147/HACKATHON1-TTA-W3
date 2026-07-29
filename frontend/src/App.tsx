@@ -8,6 +8,7 @@ import { API_BASE_URL } from './config';
 export default function App() {
   const [claim, setClaim] = useState("");
   const [zoneGeo, setZoneGeo] = useState("Global (International)");
+  const [comprehensionLevel, setComprehensionLevel] = useState("intermédiaire");
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
@@ -22,7 +23,7 @@ export default function App() {
       const response = await fetch(`${API_BASE_URL}/api/check-claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claim: text, zone_geo: zoneGeo })
+        body: JSON.stringify({ claim: text, zone_geo: zoneGeo, comprehension_level: comprehensionLevel })
       });
       if (!response.ok) throw new Error("Erreur serveur lors de la vérification.");
       const data = await response.json();
@@ -57,7 +58,13 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-[#0F172A] font-inter">
-      <Sidebar zoneGeo={zoneGeo} setZoneGeo={setZoneGeo} onPdfUpload={handlePdfUpload} />
+      <Sidebar
+        zoneGeo={zoneGeo}
+        setZoneGeo={setZoneGeo}
+        comprehensionLevel={comprehensionLevel}
+        setComprehensionLevel={setComprehensionLevel}
+        onPdfUpload={handlePdfUpload}
+      />
       
       <main className="flex-1 overflow-y-auto p-8 lg:p-12">
         <div className="max-w-4xl mx-auto space-y-8">

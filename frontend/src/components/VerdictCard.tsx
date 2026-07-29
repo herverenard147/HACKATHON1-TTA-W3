@@ -99,6 +99,26 @@ export default function VerdictCard({ result }: { result: any }) {
           {result.analyse_text}
         </p>
       </div>
+
+      {/* Détails techniques : uniquement présents pour les niveaux
+          amateur/expert (technical_details est null pour débutant/intermédiaire,
+          voir main.py build_analyse_text). */}
+      {result.technical_details && (
+        <div className="mt-6 pt-6 border-t border-[#F1F5F9] text-sm text-[#64748B] font-mono space-y-1">
+          <div>Score de similarité (cosinus) : {result.technical_details.similarity_score}</div>
+          <div>Sources consultées : {result.technical_details.nb_sources_consulted}</div>
+          {result.technical_details.raw_nli_class && (
+            <div>Classe NLI : {result.technical_details.raw_nli_class}</div>
+          )}
+          {result.technical_details.class_probabilities && (
+            <div>
+              Probabilités : {Object.entries(result.technical_details.class_probabilities)
+                .map(([cls, p]) => `${cls}=${p}`)
+                .join(', ')}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -157,25 +157,42 @@ def check_claim(request: ClaimRequest):
 
 @app.post("/api/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf') and not file.filename.endswith('.txt'):
+    # La casse de l'extension n'est pas fiable comme signal de format : de
+    # nombreux PDF (export Windows/macOS, scanners) sont nommés ".PDF" ou
+    # ".Pdf". Un filtre sensible à la casse rejetait ces fichiers, pourtant
+    # valides, avec un message trompeur ("format non accepté").
+    filename_lower = file.filename.lower()
+    is_pdf = filename_lower.endswith('.pdf')
+    is_txt = filename_lower.endswith('.txt')
+    if not is_pdf and not is_txt:
         raise HTTPException(status_code=400, detail="Seuls les fichiers PDF et TXT sont acceptés.")
-        
+
     try:
         content = await file.read()
         text = ""
-        
-        if file.filename.endswith('.pdf'):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-            # On limite aux premières pages pour l'extraction rapide
-            for i in range(min(5, len(pdf_reader.pages))):
-                page_text = pdf_reader.pages[i].extract_text()
-                if page_text:
-                    text += page_text + " "
+
+        if is_pdf:
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+                # On limite aux premières pages pour l'extraction rapide
+                for i in range(min(5, len(pdf_reader.pages))):
+                    page_text = pdf_reader.pages[i].extract_text()
+                    if page_text:
+                        text += page_text + " "
+            except Exception:
+                # Erreur de format côté client (PDF corrompu/invalide), pas une
+                # panne serveur : 400 plutôt que 500, avec un message actionnable.
+                raise HTTPException(
+                    status_code=400,
+                    detail="Le fichier PDF est illisible ou corrompu. Vérifiez qu'il s'agit bien d'un PDF valide et réessayez."
+                )
         else:
             text = content.decode('utf-8')
-            
+
         # On renvoie les 500 premiers caractères pour préremplir la barre de recherche
         extracted = text[:500] + ("..." if len(text) > 500 else "")
         return {"extracted_text": extracted.strip()}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur de lecture du document: {str(e)}")

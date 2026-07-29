@@ -128,6 +128,8 @@ Ce seuil a été vérifié expérimentalement en phase 1 : une phrase en coréen
 
 La baseline TF-IDF (vectorisation lexicale classique, sans embeddings sémantiques) atteint 0.485 avec le même pipeline de classification — l'encodeur `all-MiniLM-L6-v2` apporte un gain réel mais modeste (+0.047 absolu) par rapport à une approche purement lexicale, sur ce jeu de données.
 
+> Script de reproduction : [`evaluation/tfidf_baseline.py`](evaluation/tfidf_baseline.py). À lancer depuis la racine du dépôt avec `python3 evaluation/tfidf_baseline.py` (venv activé, `data/train.csv`/`val.csv`/`test.csv` présents). Résultat reproductible à l'identique : `Macro-F1 test = 0.4854`.
+
 ### Ce que ce chiffre signifie concrètement
 
 Sur les 1040 paires claim-evidence du jeu de test (jamais vues pendant l'entraînement), le système donne le bon verdict (SUPPORTS/REFUTES/NOT_ENOUGH_INFO) dans **56.2% des cas** (accuracy), avec une performance très inégale selon la classe : bonne sur SUPPORTS, moyenne sur NOT_ENOUGH_INFO, faible sur REFUTES (le système confond souvent une affirmation qui *contredit* une preuve avec une affirmation qu'elle *confirme*, quand les deux portent sur le même sujet).

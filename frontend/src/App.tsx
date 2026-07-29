@@ -43,8 +43,8 @@ export default function App() {
         method: "POST",
         body: formData
       });
-      if (!response.ok) throw new Error("Erreur lors de la lecture du document.");
       const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Erreur lors de la lecture du document.");
       setClaim(data.extracted_text);
     } catch (err: any) {
       alert(err.message);

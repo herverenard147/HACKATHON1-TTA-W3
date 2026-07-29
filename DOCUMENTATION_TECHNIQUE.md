@@ -185,7 +185,7 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 ## 8. Limitations techniques connues
 
 - **Corpus institutionnel quasi-absent de l'entraînement** : 3 chunks sur ~4870 dans le corpus de récupération (GIEC, OMM, Banque Mondiale), 0 dans les données labellisées train/val/test. L'apport réel du focus régional Afrique de l'Ouest/Côte d'Ivoire au *raisonnement* du classificateur est donc nul — il n'agit qu'au niveau de la récupération de sources à afficher.
-- **Filtre régional cosmétique** : le sélecteur de zone géographique (`zone_geo`) de l'interface est transmis à l'API mais n'est pas exploité par `check_claim()` — la recherche FAISS reste globale quelle que soit la zone sélectionnée.
+- **Priorisation régionale limitée par la couverture du lexique** : `zone_geo` (voir section 10) ne peut repondérer que les sources dont l'evidence mentionne une entité géographique reconnue par le même lexique que `relevance_filter.py` — les mêmes limites de couverture lexicale s'appliquent (section 8, filtre de cohérence à l'affichage).
 - **Lien d'archive limité aux documents connus** : les 2 documents institutionnels locaux (Banque Mondiale, OMM) sont désormais servis via `/documents/<fichier>` (backend, `StaticFiles`). Le document GIEC pointe vers une URL externe réelle (`ipcc.ch`) mais le fichier local correspondant (`data/climate_docs/GIEC_AR6_Afrique_Resume.pdf`) est en réalité un texte de simulation (limitation déjà documentée : le téléchargement réel du PDF n'a jamais été effectué par `4_ingest_documents.py`, qui écrit un texte de substitution avec l'extension `.pdf`) — cliquer sur ce lien externe mène au vrai site du GIEC, pas nécessairement à la page exacte citée.
 - **Sources thématiquement/géographiquement non pertinentes possibles (partiellement atténué)** : le seuil de 0.20 filtre les cas hors-sujet extrêmes, mais entre 0.20 et ~0.55 le système peut retenir une source qui partage un vocabulaire climatique générique avec le claim sans rapport géographique ou thématique réel avec lui. Exemple mesuré : pour une question portant sur une hausse localisée des précipitations dans un quartier d'Abidjan sur une période de deux ans, une des sources renvoyées porte sur la sécheresse dans la Corne de l'Afrique (score cosinus mesuré : 0.32, au-dessus du seuil, mais sans lien géographique — pays différent — ni thématique — sécheresse contre excès de pluie — avec la question). Ce n'est pas un cas isolé : sur 8 affirmations hyper-locales testées (villes différentes, phénomènes climatiques différents), aucune ne tombe sous 0.20, et certaines remontent même des extraits Climate-FEVER totalement hors sujet climatique (un extrait sur une pièce de théâtre classique a été retourné avec un score de 0.42 pour une question sur le paludisme lié à la chaleur). Cette limite tient à la nature du filtrage par similarité d'embeddings : la proximité sémantique globale (vocabulaire climatique commun) ne garantit pas la pertinence contextuelle précise (même lieu, même phénomène).
 
@@ -204,8 +204,52 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 ## 9. Pistes d'amélioration futures
 
 - **Affiner le filtre de cohérence géographique/thématique** (implémenté, voir section 8) : passer d'une simple présence/absence lexicale à une vérification par catégorie (geo et thème séparément) pour détecter aussi les cas de recouvrement thématique fortuit sans recouvrement géographique réel (ex. cas Somalie/Bouaké encore non détecté aujourd'hui, section 8) ; élargir le lexique au-delà des ~35 entités actuelles ; envisager une reconnaissance d'entités nommées (NER) légère plutôt qu'un lexique statique si la couverture devient un problème récurrent.
-- **Élargir le corpus institutionnel** : au-delà des 3 chunks actuels, ingérer davantage de rapports GIEC/OMM/Banque Mondiale complets (pas de simulation de téléchargement) pour que le focus régional annoncé ait un effet réel sur la couverture des sources.
-- **Implémenter le filtre régional** (`zone_geo`) côté backend, par exemple en repondérant ou restreignant la recherche FAISS aux documents tagués pour la zone sélectionnée.
+- **Élargir le corpus institutionnel** : au-delà des 3 chunks actuels, ingérer davantage de rapports GIEC/OMM/Banque Mondiale complets (pas de simulation de téléchargement) pour que le focus régional (`zone_geo`, section 10) ait davantage de contenu pertinent à mettre en avant.
+- **Étendre `zone_geo` au-delà d'une repondération** (implémenté, voir section 10) : envisager, une fois le corpus institutionnel élargi, une vraie restriction géographique optionnelle (plutôt qu'un simple boost) pour les cas où l'utilisateur veut explicitement exclure le contenu hors-zone — actuellement volontairement exclu pour ne jamais renvoyer 0 source sur un corpus aussi réduit.
 - **Explorer un jeu de données REFUTES plus riche** ou des techniques d'augmentation ciblées sur cette classe, seule à rester sous 0.5 de F1.
 - **Ingestion continue du corpus** plutôt qu'un index FAISS statique reconstruit manuellement.
 - **Stratégie multilingue explicite** (traduction automatique du claim vers la langue dominante du corpus avant recherche, ou corpus francophone étoffé) plutôt que de compter sur la robustesse cross-lingue implicite de l'encodeur.
+- **Export/partage du verdict** (implémenté en texte formaté, voir section 11) : ajouter une option d'export image (badge + claim + sources sous forme de visuel PNG) pour les canaux où une image capte davantage l'attention qu'un texte collé (ex. story Instagram/statut WhatsApp) — nécessiterait une librairie de rendu image côté client (ex. génération canvas), non ajoutée pour l'instant pour rester sans nouvelle dépendance.
+
+---
+
+## 10. Priorisation régionale des sources (`zone_geo`)
+
+`zone_geo` (transmis par le sélecteur de zone de l'interface, ou en texte libre côté API) permet de **repondérer** — jamais de filtrer en dur — les sources institutionnelles/régionales pertinentes pour la zone demandée par l'utilisateur.
+
+**Point d'intégration** : un second passage strictement **après** le choix du top-1 utilisé pour le seuil anti-hallucination (section 4) et la classification NLI, qui restent inchangés quel que soit `zone_geo`. Ce choix garantit que `zone_geo` ne peut jamais faire basculer un verdict — il affecte uniquement quelles sources complémentaires sont mises en avant dans le top-k affiché. C'est la même logique déjà appliquée au filtre de cohérence à l'affichage (`relevance_filter.py`, section 8) : les deux mécanismes interviennent après la décision, jamais dedans.
+
+**Mécanisme** :
+1. Le claim et `zone_geo` sont d'abord passés à `extract_entities()` (le même lexique géo/thème que `relevance_filter.py`, réutilisé tel quel — pas de second lexique).
+2. Si `zone_geo` ne contient aucune entité géographique reconnue (valeur par défaut "Global (International)", faute de frappe, zone hors lexique), **aucune repondération n'a lieu** : le comportement est structurellement identique à l'ancien code (mêmes indices FAISS, même ordre).
+3. Sinon, un re-scan complet du corpus (`index.search(c_emb, len(corpus_df))` — peu coûteux vu la taille actuelle du corpus, ~4870 lignes) ajoute `ZONE_GEO_BOOST = 0.15` au score cosinus de chaque candidat dont l'evidence recoupe au moins une entité de `zone_geo`, puis retrie et reprend le top-k pour l'affichage.
+
+**Vérifié par exécution réelle** (claim générique et ambigu, "Les températures moyennes augmentent fortement à cause du changement climatique.") :
+- Sans `zone_geo` : sources = `[Banque Mondiale (score top-1 0.729), Climate-FEVER, Climate-FEVER]`.
+- Avec `zone_geo="Côte d'Ivoire"` : sources = `[Banque Mondiale, Organisation Météorologique Mondiale (mentionne Abidjan/Afrique de l'Ouest), Climate-FEVER]` — le verdict et le score du top-1 restent identiques dans les deux cas.
+- Avec `zone_geo` non reconnu (ex. faute de frappe) : sources identiques au cas sans `zone_geo`.
+
+**Limites** : la repondération ne peut promouvoir que les 3 chunks institutionnels existants (corpus quasi exclusivement Climate-FEVER, section 8) ; elle hérite des limites de couverture du même lexique que `relevance_filter.py` (entités non listées jamais reconnues) ; le re-scan complet du corpus à chaque requête avec `zone_geo` reconnu n'est acceptable que parce que le corpus reste petit (~4870 lignes) — une stratégie différente (index géo-taggé séparé, par exemple) serait nécessaire si le corpus grossissait significativement.
+
+---
+
+## 11. Export et partage du verdict
+
+Objectif : permettre de faire circuler un résultat de vérification aussi vite que la désinformation qu'il corrige, sur les canaux où elle se propage (WhatsApp, Facebook, X).
+
+**Option retenue** : texte formaté copiable, plutôt qu'une image générée. Choix justifié par le cadre technique existant :
+- Aucune nouvelle dépendance (pas de librairie de rendu image/canvas à ajouter).
+- Aucun stockage backend nécessaire (pas de lien partageable persistant, ce qui aurait demandé une nouvelle table/DB non présente actuellement — explicitement exclu sans validation préalable).
+- Fonctionne à l'identique sur desktop et mobile, sans dépendre d'un navigateur capable de générer un fichier image côté client.
+
+**Implémentation** (`frontend/src/components/VerdictCard.tsx`) : un bouton "Partager" construit un texte formaté (emoji, claim d'origine, verdict, synthèse, jusqu'à 2 sources principales avec extrait tronqué proprement à une limite de mots — jamais au milieu d'un mot ou d'une phrase — et nom de l'institution) puis :
+1. Utilise l'API native `navigator.share()` si disponible (mobile : ouvre directement le menu de partage du système, WhatsApp/X/etc. y apparaissent) ;
+2. Sinon, copie le texte dans le presse-papier (`navigator.clipboard.writeText`) avec confirmation visuelle ("Copié !").
+
+Le claim d'origine est rattaché côté frontend au résultat au moment de la réponse de l'API (`setResult({ ...data, claim: text })`, dans `App.tsx`) car l'API `check-claim` ne renvoie pas elle-même le claim vérifié.
+
+**Vérifié par exécution réelle** (logique de génération testée directement contre de vraies réponses de l'API, sur les deux verdicts) :
+- Cas CONFIRMÉ (Côte d'Ivoire/Banque Mondiale) : texte de 965 caractères, 2 sources incluses, aucune troncature au milieu d'un mot.
+- Cas NON VÉRIFIABLE (score < 0.20, zéro source) : texte de 435 caractères, section "Sources" correctement omise plutôt que laissée vide.
+
+**Limites** : pas d'option image (voir section 9, piste future) ; pas de lien partageable persistant (nécessiterait un stockage backend, hors périmètre actuel) ; `navigator.share()` n'est pas disponible sur tous les navigateurs desktop (repli automatique sur le presse-papier dans ce cas, mais pas testé sur l'ensemble des navigateurs/OS).

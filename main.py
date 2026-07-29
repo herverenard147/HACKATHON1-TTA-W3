@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -8,6 +9,7 @@ from sentence_transformers import SentenceTransformer
 import joblib
 import PyPDF2
 import io
+import os
 from typing import List, Optional
 
 app = FastAPI(
@@ -24,6 +26,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Sert les documents institutionnels ingérés localement (data/climate_docs/) pour
+# que le lien "Consulter l'archive" des sources sans URL externe pointe vers un
+# contenu réel au lieu d'un placeholder "local" mal interprété par le frontend.
+if os.path.isdir("data/climate_docs"):
+    app.mount("/documents", StaticFiles(directory="data/climate_docs"), name="documents")
 
 # Modèles de données
 class ClaimRequest(BaseModel):

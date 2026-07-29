@@ -25,7 +25,8 @@ OFFICIAL_SOURCES = [
         "year": "2022"
     },
     {
-        "url": "local",
+        # Pas d'URL externe réelle : contenu fourni en dur (voir "content"), servi
+        # localement par le backend via /documents/<filename> (cf. main.py).
         "filename": "BanqueMondiale_Cote_Ivoire.txt",
         "institution": "Banque Mondiale (CCKP)",
         "title": "Profil climatique de la Côte d'Ivoire",
@@ -33,7 +34,6 @@ OFFICIAL_SOURCES = [
         "content": "Les données de la Banque Mondiale indiquent que les températures moyennes annuelles en Côte d'Ivoire ont augmenté d'environ 1°C depuis 1960. Les projections climatiques suggèrent une augmentation de la fréquence des vagues de chaleur et une perturbation des saisons des pluies, menaçant particulièrement la production de cacao dans les régions du sud et de l'ouest."
     },
     {
-        "url": "local",
         "filename": "OMM_Afrique_Climat.txt",
         "institution": "Organisation Météorologique Mondiale (OMM)",
         "title": "État du Climat en Afrique 2023",
@@ -51,7 +51,7 @@ def download_or_create_files():
     for source in OFFICIAL_SOURCES:
         filepath = os.path.join(DOCS_DIR, source["filename"])
         if not os.path.exists(filepath):
-            if source["url"] == "local":
+            if "content" in source:
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(source["content"])
                 print(f"Créé : {source['filename']}")
@@ -92,7 +92,9 @@ def process_documents():
                     "institution": source["institution"],
                     "title": source["title"],
                     "year": source["year"],
-                    "url": source.get("url", "Document Local")
+                    # Pas d'URL externe fournie -> document servi localement par le
+                    # backend (voir le mount StaticFiles "/documents" dans main.py).
+                    "url": source.get("url") or f"/documents/{source['filename']}"
                 })
     return new_chunks
 

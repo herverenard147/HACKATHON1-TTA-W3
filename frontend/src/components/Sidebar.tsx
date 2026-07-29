@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Globe, UploadCloud, CheckCircle2 } from 'lucide-react';
 
 interface SidebarProps {
@@ -9,10 +9,29 @@ interface SidebarProps {
 
 export default function Sidebar({ zoneGeo, setZoneGeo, onPdfUpload }: SidebarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       onPdfUpload(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onPdfUpload(e.dataTransfer.files[0]);
     }
   };
 
@@ -46,9 +65,16 @@ export default function Sidebar({ zoneGeo, setZoneGeo, onPdfUpload }: SidebarPro
         <label className="block text-sm font-bold text-[#1E293B] uppercase tracking-wide mb-3">📄 Analyse de Document</label>
         <p className="text-xs text-[#64748B] mb-4">Importez un PDF pour extraire une affirmation à vérifier.</p>
         
-        <div 
+        <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-[#CBD5E1] rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-[#F8FAFC] hover:border-[#059669] transition-all group"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all group ${
+            isDragging
+              ? "bg-[#F0FDF4] border-[#059669]"
+              : "border-[#CBD5E1] hover:bg-[#F8FAFC] hover:border-[#059669]"
+          }`}
         >
           <UploadCloud className="w-8 h-8 text-[#94A3B8] mb-2 group-hover:text-[#059669] transition-colors" />
           <span className="text-sm font-medium text-[#475569]">Glissez un PDF ici ou</span>

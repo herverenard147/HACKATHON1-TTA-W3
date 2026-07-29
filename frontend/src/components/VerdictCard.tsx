@@ -1,44 +1,6 @@
 import React, { useState } from 'react';
 import { Share2, Check } from 'lucide-react';
-
-// Texte formaté, pensé pour être collé tel quel sur WhatsApp/Facebook/X : pas
-// de mise en forme HTML (ces canaux ne la rendent pas), juste des sauts de
-// ligne et des puces simples. Reprend le claim d'origine, le verdict et
-// jusqu'à 2 sources principales (cf. consigne "1-2 sources principales") —
-// jamais tronqué au milieu d'une phrase : seul l'extrait de chaque evidence
-// est raccourci (à une limite de mots, pas de caractères bruts) si trop long.
-function buildShareText(result: any): string {
-  const lines: string[] = [];
-  lines.push('🌍 TERRAVA-AI — Vérification climatique');
-  lines.push('');
-  if (result.claim) {
-    lines.push('Affirmation vérifiée :');
-    lines.push(`« ${result.claim} »`);
-    lines.push('');
-  }
-  lines.push(`Verdict : ${result.badge_icon} ${result.badge_text}`);
-  lines.push('');
-  lines.push(result.analyse_text);
-
-  const sources = (result.sources || []).slice(0, 2);
-  if (sources.length > 0) {
-    lines.push('');
-    lines.push('Sources :');
-    sources.forEach((s: any, i: number) => {
-      let excerpt = s.evidence;
-      const LIMIT = 180;
-      if (excerpt.length > LIMIT) {
-        const cut = excerpt.slice(0, LIMIT);
-        excerpt = cut.slice(0, cut.lastIndexOf(' ')) + '…';
-      }
-      lines.push(`${i + 1}. ${s.institution} — « ${excerpt} »`);
-    });
-  }
-
-  lines.push('');
-  lines.push('Vérifié avec TERRAVA-AI (fact-checking climatique)');
-  return lines.join('\n');
-}
+import { shareOrCopy } from '../shareText';
 
 export default function VerdictCard({ result }: { result: any }) {
   const [copied, setCopied] = useState(false);
@@ -50,27 +12,10 @@ export default function VerdictCard({ result }: { result: any }) {
   else if (result.badge_class === "badge-refuted") badgeColor = "bg-[#DC2626] text-white";
 
   const handleShare = async () => {
-    const text = buildShareText(result);
-
-    // API de partage native (WhatsApp/X/etc. apparaissent directement dans le
-    // menu de partage sur mobile) quand disponible ; sinon presse-papier,
-    // qui fonctionne partout (desktop inclus) sans dépendance supplémentaire.
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-        return;
-      } catch (err) {
-        // Partage annulé par l'utilisateur ou API refusée dans ce contexte :
-        // on retombe silencieusement sur le presse-papier ci-dessous.
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(text);
+    const usedClipboard = await shareOrCopy(result);
+    if (usedClipboard) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      alert("Impossible de copier automatiquement. Voici le texte à partager :\n\n" + text);
     }
   };
 

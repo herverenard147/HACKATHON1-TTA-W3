@@ -13,6 +13,7 @@ import os
 import unicodedata
 from typing import List, Optional
 from relevance_filter import is_relevance_uncertain, extract_entities
+import history_store
 
 # OCR de repli pour les pages PDF sans couche texte (scan/image). Import
 # optionnel : si pytesseract/pdf2image ou le binaire système tesseract-ocr
@@ -135,6 +136,12 @@ class ClaimRequest(BaseModel):
     claim: str
     zone_geo: str = "Global (International)"
     comprehension_level: str = "intermediaire"
+    # Identifiant léger généré et conservé côté client (pas de compte, pas de
+    # mot de passe - voir history_store.py et DOCUMENTATION_TECHNIQUE.md pour
+    # les limites assumées). Optionnel : si absent, la vérification n'est pas
+    # sauvegardée dans l'historique (aucune régression pour un client qui
+    # n'envoie pas ce champ).
+    user_id: Optional[str] = None
 
 class Source(BaseModel):
     institution: str
@@ -174,6 +181,7 @@ def load_models():
         index = faiss.read_index("models_saved/faiss_index.bin")
         classifier = joblib.load("models_saved/classifier.joblib")
         corpus_df = pd.read_csv("data/corpus.csv")
+        history_store.init_db()
         print("Moteur d'IA chargé avec succès.")
     except Exception as e:
         print(f"Erreur fatale lors du chargement des modèles : {e}")
@@ -299,6 +307,28 @@ def check_claim(request: ClaimRequest):
             raw_verdict=raw_verdict, probabilities=probabilities, nb_sources=len(sources)
         )
 
+        # Sauvegarde dans l'historique personnel : TELLE QUELLE, la réponse
+        # déjà décidée ci-dessus (verdict, texte de niveau, sources) - jamais
+        # recalculée à la consultation de l'historique (voir GET /api/history).
+        # Uniquement si un user_id a été fourni ; sinon la vérification n'est
+        # simplement pas persistée (pas d'erreur, comportement anonyme normal).
+        if request.user_id:
+            try:
+                history_store.save_verification(
+                    user_id=request.user_id,
+                    claim=request.claim,
+                    comprehension_level=level,
+                    badge_class=badge_class,
+                    badge_icon=badge_icon,
+                    badge_text=badge_text,
+                    analyse_text=analyse_text,
+                    sources=[s.model_dump() for s in sources],
+                )
+            except Exception as history_err:
+                # Un échec de sauvegarde de l'historique ne doit jamais faire
+                # échouer la vérification elle-même (fonctionnalité annexe).
+                print(f"[check-claim] Échec de sauvegarde de l'historique: {history_err}")
+
         return VerificationResponse(
             badge_class=badge_class,
             badge_icon=badge_icon,
@@ -310,6 +340,30 @@ def check_claim(request: ClaimRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class HistoryEntry(BaseModel):
+    id: int
+    claim: str
+    comprehension_level: str
+    badge_class: str
+    badge_icon: str
+    badge_text: str
+    analyse_text: str
+    sources: List[Source]
+    created_at: str
+
+
+@app.get("/api/history/{user_id}", response_model=List[HistoryEntry])
+def get_history(user_id: str):
+    """Retourne UNIQUEMENT les vérifications appartenant à ce user_id (filtrage
+    strict côté SQL, voir history_store.get_history). Aucune authentification :
+    quiconque connaît le user_id peut consulter l'historique associé — limite
+    assumée du modèle d'identifiant léger, documentée dans
+    DOCUMENTATION_TECHNIQUE.md."""
+    if not user_id.strip():
+        raise HTTPException(status_code=400, detail="Identifiant utilisateur manquant.")
+    return history_store.get_history(user_id)
 
 @app.post("/api/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):

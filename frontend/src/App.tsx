@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
+import { History } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ClaimInput from './components/ClaimInput';
 import VerdictCard from './components/VerdictCard';
 import SourcesAccordion from './components/SourcesAccordion';
+import HistoryPanel from './components/HistoryPanel';
 import { API_BASE_URL } from './config';
+import { getUserId } from './userId';
 
 export default function App() {
   const [claim, setClaim] = useState("");
@@ -12,6 +15,8 @@ export default function App() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [userId] = useState(getUserId);
 
   const handleVerify = async (text: string) => {
     if (!text.trim()) return;
@@ -23,7 +28,7 @@ export default function App() {
       const response = await fetch(`${API_BASE_URL}/api/check-claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claim: text, zone_geo: zoneGeo, comprehension_level: comprehensionLevel })
+        body: JSON.stringify({ claim: text, zone_geo: zoneGeo, comprehension_level: comprehensionLevel, user_id: userId })
       });
       if (!response.ok) throw new Error("Erreur serveur lors de la vérification.");
       const data = await response.json();
@@ -69,10 +74,20 @@ export default function App() {
       <main className="flex-1 overflow-y-auto p-8 lg:p-12">
         <div className="max-w-4xl mx-auto space-y-8">
           
-          <header className="mb-12">
-            <h1 className="text-3xl font-extrabold tracking-tight mb-2">Analyse Climatique</h1>
-            <p className="text-[#64748B] text-lg">Vérifiez la validité scientifique d'une déclaration par rapport aux données du GIEC et de l'OMM.</p>
+          <header className="mb-12 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight mb-2">Analyse Climatique</h1>
+              <p className="text-[#64748B] text-lg">Vérifiez la validité scientifique d'une déclaration par rapport aux données du GIEC et de l'OMM.</p>
+            </div>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-2 bg-white border border-[#E2E8F0] hover:bg-[#F8FAFC] text-[#334155] font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all shrink-0"
+            >
+              <History className="w-4 h-4" /> Mon historique
+            </button>
           </header>
+
+          {showHistory && <HistoryPanel userId={userId} onClose={() => setShowHistory(false)} />}
 
           <ClaimInput claim={claim} setClaim={setClaim} onVerify={handleVerify} isLoading={isVerifying} />
           

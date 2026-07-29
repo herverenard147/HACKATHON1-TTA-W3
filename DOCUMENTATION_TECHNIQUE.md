@@ -275,3 +275,32 @@ Chaque verdict affiché propose un bouton 👍/👎, actif uniquement si la vér
 - *"???!!!###"* (hors-sujet, score < 0.20) → `AUCUNE PREUVE SCIENTIFIQUE` (0 source)
 
 Chacune a reçu un `verification_id` distinct et séquentiel, confirmant que chaque affirmation a bien traversé le pipeline complet et a été sauvegardée séparément dans l'historique.
+
+---
+
+## 11. Veille GIEC/OMM (détection de nouveaux rapports)
+
+`scripts/veille_giec_omm.py` vérifie si de nouveaux rapports/publications GIEC ou OMM sont apparus depuis la dernière exécution, et **signale** la détection (stdout + fichier de rapport dans `veille_reports/`). Périmètre volontairement limité à la **détection**, pas à l'ingestion : aucun contenu n'est téléchargé ni ajouté au corpus FAISS automatiquement — l'ingestion reste un geste manuel (`4_ingest_documents.py` / `update_corpus.py`, section 5).
+
+**Sources surveillées** (vérifiées accessibles avant d'écrire le script, pas devinées) :
+- **GIEC/IPCC** : flux RSS officiel `https://www.ipcc.ch/feed/` (HTTP 200 confirmé, `Content-Type: application/rss+xml`), parsé avec `feedparser`.
+- **OMM/WMO** : aucun flux RSS public découvert sur `wmo.int` (recherche effectuée : ni balise `<link rel="alternate" type="application/rss+xml">` sur la page d'accueil, ni chemins usuels comme `/rss`, `/en/rss.xml`). Repli sur l'extraction des liens de la page `https://wmo.int/resources/publications` (HTTP 200 confirmé, liste bien des publications réelles, ex. *"State of Climate in Africa 2025"*).
+
+**État** : `veille_state.json` (racine du dépôt, gitignoré comme `history.db`) conserve les identifiants (URLs) déjà vus par source, d'une exécution à l'autre. Au tout premier lancement, tout est signalé comme nouveau par définition.
+
+**Vérifié par exécution réelle** (deux lancements successifs, contre les vraies sources en ligne) :
+- 1er lancement : 10 entrées détectées côté GIEC (articles RSS réels : *"IPCC opens registration for experts to review First Order Draft..."*, etc.), 12 côté OMM (publications réelles : *state-of-climate-africa-2025*, *wmo-airborne-dust-bulletin-no-10-july-2026*, etc.).
+- 2e lancement (immédiatement après) : `Aucune nouveauté (10 entrée(s) déjà connue(s))` / `Aucune nouveauté (12 entrée(s) déjà connue(s))` — confirme que l'état est bien persisté et comparé correctement.
+
+**Lancement manuel** :
+```bash
+source venv/bin/activate
+python3 scripts/veille_giec_omm.py
+```
+
+**Ce qui reste manuel** : la planification récurrente (pas configurée dans cette session) et l'ingestion effective d'un nouveau document détecté. **Ce qui est automatique** : la détection elle-même et la mise à jour de l'état une fois le script lancé. Exemple de tâche cron pour une vérification quotidienne (à ajouter par l'utilisateur, `crontab -e`) :
+```
+0 8 * * * cd /chemin/vers/terrava-ai && venv/bin/python3 scripts/veille_giec_omm.py >> veille.log 2>&1
+```
+
+**Limites** : le repli OMM par extraction de liens est plus fragile qu'un flux RSS (dépend de la structure HTML actuelle de `wmo.int`, pourrait casser silencieusement si le site change de mise en page — un échec de requête est cependant signalé dans le rapport, pas masqué) ; la détection ne distingue pas un document réellement nouveau d'une réorganisation d'URL (un lien renommé serait signalé comme "nouveau") ; aucune notification (email, Slack, etc.) n'est envoyée, seulement un fichier de rapport local.

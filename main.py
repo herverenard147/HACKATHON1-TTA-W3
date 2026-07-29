@@ -11,6 +11,7 @@ import PyPDF2
 import io
 import os
 from typing import List, Optional
+from relevance_filter import is_relevance_uncertain
 
 app = FastAPI(
     title="TERRAVA-AI API",
@@ -44,6 +45,11 @@ class Source(BaseModel):
     title: str
     year: str
     url: str
+    # Filtre d'affichage uniquement (post-classification, n'affecte ni le
+    # seuil de 0.20 ni le verdict) : True si le claim contient une entité
+    # géographique/thématique reconnue qui ne se retrouve pas dans cette
+    # evidence précise. Voir relevance_filter.py.
+    relevance_uncertain: bool = False
 
 class VerificationResponse(BaseModel):
     badge_class: str
@@ -126,12 +132,16 @@ def check_claim(request: ClaimRequest):
         if similarity_score >= 0.20:
             for i in range(k):
                 row = corpus_df.iloc[indices[0][i]]
+                evidence_text = str(row['evidence'])
                 sources.append(Source(
                     institution=str(row.get('institution', 'Source Inconnue')),
-                    evidence=str(row['evidence']),
+                    evidence=evidence_text,
                     title=str(row.get('title', 'Document officiel')),
                     year=str(row.get('year', 'N/A')),
-                    url=str(row.get('url', '#'))
+                    url=str(row.get('url', '#')),
+                    # Filtre de cohérence géo/thématique appliqué uniquement à
+                    # l'affichage, une fois le verdict déjà déterminé.
+                    relevance_uncertain=is_relevance_uncertain(request.claim, evidence_text)
                 ))
 
         return VerificationResponse(

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, ExternalLink } from 'lucide-react';
+import { BookOpen, ExternalLink, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 // Construit une URL "consultable" à partir de la valeur url renvoyée par l'API :
@@ -29,10 +29,16 @@ export default function SourcesAccordion({ sources }: { sources: any[] }) {
         {sources.map((src, idx) => {
           const archiveUrl = resolveArchiveUrl(src.url);
           return (
-            <div key={idx} className="bg-white p-5 rounded-xl shadow-sm border border-[#E2E8F0] border-l-4 border-l-[#059669]">
-              <div className="text-xs font-bold text-[#64748B] uppercase mb-2">
+            <div key={idx} className={`bg-white p-5 rounded-xl shadow-sm border border-[#E2E8F0] border-l-4 ${src.relevance_uncertain ? 'border-l-[#D97706]' : 'border-l-[#059669]'}`}>
+              <div className="text-xs font-bold text-[#64748B] uppercase mb-2 flex items-center gap-2">
                 {src.institution} — {src.year !== 'nan' ? src.year : 'Document officiel'}
               </div>
+              {src.relevance_uncertain && (
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-[#B45309] bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-3 py-1.5 mb-3 w-fit">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Pertinence géographique/thématique incertaine
+                </div>
+              )}
               <p className="text-[#334155] italic leading-relaxed mb-4">
                 « {src.evidence} »
               </p>

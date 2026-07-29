@@ -62,6 +62,20 @@ En quelques secondes, l'utilisateur obtient un verdict et peut remonter directem
 
 ---
 
+## Une plateforme pour apprendre, pas seulement pour vérifier
+
+TERRAVA-AI ne se limite pas à donner un verdict brut : la façon dont l'explication est présentée s'adapte à qui pose la question, pour que l'outil serve aussi de porte d'entrée pédagogique sur le climat, pas seulement de "juge" binaire.
+
+Avant chaque vérification, on choisit un niveau — **débutant, intermédiaire, amateur ou expert**. Le verdict lui-même (confirmé, réfuté, non vérifiable) ne change jamais selon le niveau choisi : c'est uniquement l'explication qui s'adapte.
+- En **débutant**, la réponse est formulée en langage courant, sans jargon, avec une explication simple du pourquoi.
+- En **intermédiaire**, un peu plus de vocabulaire précis, tout en restant accessible.
+- En **amateur**, des éléments de méthode apparaissent (combien de sources ont été consultées, à quel point la correspondance est forte).
+- En **expert**, le détail technique complet est affiché (score de similarité exact, classe de classification, probabilités par catégorie).
+
+Chaque utilisateur retrouve aussi ses propres vérifications passées dans un **historique personnel** (sans compte ni mot de passe à créer — un simple identifiant conservé sur son navigateur), avec la possibilité de repartager n'importe quelle vérification déjà effectuée. L'idée : permettre de suivre sa propre progression, de revenir sur une affirmation vérifiée plus tôt, et de partager ce qu'on a appris — pas seulement d'obtenir une réponse ponctuelle.
+
+---
+
 ## Limites actuelles, présentées honnêtement
 
 TERRAVA-AI est un outil d'aide à la décision, pas une autorité absolue. Quelques limites importantes à connaître :
@@ -71,6 +85,7 @@ TERRAVA-AI est un outil d'aide à la décision, pas une autorité absolue. Quelq
 - **Le filtre de zone géographique** (Global / Afrique de l'Ouest / Côte d'Ivoire) présent dans l'interface **n'influence pas encore réellement la recherche** — c'est une fonctionnalité prévue mais pas encore active.
 - **Couverture des documents institutionnels encore limitée** : la base de données actuelle contient surtout des extraits d'un grand jeu de données scientifique international (Climate-FEVER) ; les documents propres au GIEC, à l'OMM et à la Banque Mondiale ne représentent aujourd'hui qu'une infime partie du corpus (quelques extraits sur près de 4900).
 - **Le score de confiance affiché est indicatif**, pas une probabilité statistiquement calibrée.
+- **L'historique personnel n'est pas protégé par un mot de passe.** L'identifiant qui permet de retrouver ses vérifications est simplement conservé sur l'appareil utilisé, sans création de compte — pratique et sans friction, mais ce n'est pas un système de sécurité : à ne pas utiliser pour des informations sensibles.
 
 Ces limites sont documentées pour que TERRAVA-AI soit utilisé pour ce qu'il est aujourd'hui : un premier filtre rapide et sourcé, pas un jugement final.
 

@@ -218,6 +218,8 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 
 - **Dépendances non pinnées dans les fichiers `legacy/`** : `api.py`/`app.py` (prototypes obsolètes) ne font pas partie du chemin de production et ne sont pas couverts par les garanties ci-dessus (voir `legacy/README.md`).
 
+- **Identifiant utilisateur léger sans authentification (historique, section 10)** : `user_id` est une chaîne quelconque générée côté client, jamais vérifiée côté serveur. Ce n'est **pas** un mécanisme de sécurité — quiconque connaît (ou devine) un `user_id` peut consulter l'historique associé via `GET /api/history/{user_id}`. Acceptable pour un usage à faible enjeu (retrouver ses propres vérifications sur son navigateur) mais impropre à protéger une donnée sensible. Une vraie authentification (session/mot de passe) résoudrait ce point mais sortait explicitement du périmètre demandé pour cette fonctionnalité.
+
 ---
 
 ## 9. Pistes d'amélioration futures
@@ -228,3 +230,30 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 - **Explorer un jeu de données REFUTES plus riche** ou des techniques d'augmentation ciblées sur cette classe, seule à rester sous 0.5 de F1.
 - **Ingestion continue du corpus** plutôt qu'un index FAISS statique reconstruit manuellement.
 - **Stratégie multilingue explicite** (traduction automatique du claim vers la langue dominante du corpus avant recherche, ou corpus francophone étoffé) plutôt que de compter sur la robustesse cross-lingue implicite de l'encodeur.
+- **Authentification réelle pour l'historique** (voir section 8 et section 10) : remplacer l'identifiant léger par un vrai compte (session, mot de passe) si l'historique venait à contenir des informations sensibles ou à être exposé publiquement.
+
+---
+
+## 10. Niveau de compréhension adaptatif et historique personnalisé
+
+### Niveau de compréhension
+
+Avant chaque vérification, l'utilisateur choisit un niveau parmi 4 libellés exacts : **débutant, intermédiaire, amateur, expert**. Le niveau **ne modifie jamais le verdict** — retrieval FAISS, seuil anti-hallucination (0.20) et classification NLI sont calculés une seule fois, exactement comme avant cette fonctionnalité (`check_claim`, `main.py`). Le niveau agit uniquement comme une **couche de formatage** appliquée après coup (`build_analyse_text`), qui adapte :
+- le texte d'explication (`analyse_text`) : résumé pédagogique simple (débutant) → vocabulaire un peu plus précis (intermédiaire) → mention du score de similarité et du nombre de sources consultées (amateur) → détail technique complet, score cosinus exact + classe NLI brute + probabilités par classe (expert) ;
+- un champ `technical_details` (JSON), `null` pour débutant/intermédiaire, peuplé pour amateur/expert.
+
+Une valeur non reconnue (faute de frappe, champ absent) retombe sur `intermediaire` (`normalize_comprehension_level`) — comportement par défaut inchangé pour tout appelant qui ignore ce champ.
+
+**Vérifié par exécution réelle** : même claim (Côte d'Ivoire/Banque Mondiale) interrogé aux 4 niveaux → même badge (`CONFIRMÉ PAR LES DONNÉES SCIENTIFIQUES`) dans les 4 cas ; au niveau expert, la probabilité de classe la plus élevée (`SUPPORTS=0.476`) corrobore bien ce même badge — aucune contradiction entre niveaux. Un bug de sérialisation a été trouvé et corrigé pendant ce test : `classifier.predict()`/`predict_proba()` renvoient des types `numpy` non sérialisables par Pydantic, plantant le niveau expert en 500 avant correction (cast explicite en `str`/`float` natifs).
+
+### Historique personnalisé
+
+Chaque vérification effectuée avec un `user_id` (transmis par le client, voir ci-dessous) est enregistrée : claim, niveau de compréhension choisi, verdict complet (badge, texte d'analyse déjà formaté pour ce niveau, sources), horodatage. **Enregistrée telle quelle** — la consultation de l'historique ne recalcule jamais rien, elle relit simplement ce qui a été décidé et renvoyé au moment de la vérification.
+
+**Stockage** : SQLite (`history_store.py`, fichier `history.db` à la racine, gitignoré comme `models_saved/`). Choix justifié par l'absence de toute base de données préexistante dans le projet (uniquement des CSV statiques) et par une architecture FastAPI mono-instance déjà locale — SQLite évite d'ajouter un serveur de base de données à administrer pour un besoin de cette taille.
+
+**Identifiant utilisateur léger** (périmètre volontairement limité, décision déjà validée — pas d'authentification complète) : une chaîne générée une fois côté client (`crypto.randomUUID()`, `frontend/src/userId.ts`) et conservée en `localStorage`. Envoyée en tant que `user_id` optionnel dans la requête de vérification ; absente, la vérification n'est simplement pas sauvegardée (aucune erreur). **Limite assumée** : ce n'est pas un mécanisme de sécurité — voir section 8.
+
+**Endpoint** : `GET /api/history/{user_id}` renvoie uniquement les entrées de ce `user_id` (filtrage strict `WHERE user_id = ?` côté SQL). Vérifié par exécution réelle avec deux identifiants distincts (3 vérifications pour l'un, 1 pour l'autre) : chaque historique ne contient que ses propres entrées, aucune fuite croisée constatée.
+
+**Partage d'une entrée d'historique** : réutilise le même mécanisme que le bouton "Partager" du verdict (texte formaté copiable dans le presse-papier, ou `navigator.share()` si disponible), factorisé dans `frontend/src/shareText.ts` et partagé entre `VerdictCard.tsx` (verdict qui vient d'être rendu) et `HistoryPanel.tsx` (entrée d'historique), au lieu d'être dupliqué.

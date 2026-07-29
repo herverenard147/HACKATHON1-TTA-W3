@@ -35,6 +35,11 @@ Une interface moderne "Scientific Workbench" gérée dans le dossier `/frontend`
  Prérequis
 - **Python 3.9+** (Pour l'API IA)
 - **Node.js 18+** (Pour l'interface React)
+- **tesseract-ocr** (dépendance système, pas un paquet Python) : requis pour l'OCR de repli sur les PDF scannés (pages sans couche texte). Sans ce binaire, l'upload de PDF continue de fonctionner normalement pour les documents à texte natif — seules les pages scannées restent vides, comme avant l'ajout de l'OCR. Installation (Debian/Ubuntu) :
+  ```bash
+  sudo apt install tesseract-ocr tesseract-ocr-fra
+  ```
+  `poppler-utils` (nécessaire à `pdf2image` pour convertir une page PDF en image) est généralement déjà présent sur ces distributions ; sinon : `sudo apt install poppler-utils`.
 
  Étape 1 : Lancer le Serveur IA (Back-End)
 

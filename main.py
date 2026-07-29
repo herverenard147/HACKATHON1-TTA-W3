@@ -13,6 +13,19 @@ import os
 from typing import List, Optional
 from relevance_filter import is_relevance_uncertain, extract_entities
 
+# OCR de repli pour les pages PDF sans couche texte (scan/image). Import
+# optionnel : si pytesseract/pdf2image ou le binaire système tesseract-ocr
+# ne sont pas installés, l'app démarre quand même — l'OCR est simplement
+# indisponible et les pages sans texte natif restent vides comme avant
+# (voir upload_pdf). Ne jamais bloquer tout le backend pour cette dépendance
+# optionnelle système (documentée dans README.md).
+try:
+    import pytesseract
+    from pdf2image import convert_from_bytes
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
+
 # Poids additif appliqué au score cosinus d'une source candidate quand sa zone
 # géographique (déduite du même lexique que relevance_filter.py) recoupe la
 # zone demandée par l'utilisateur. Calibré empiriquement : les chunks
@@ -225,22 +238,39 @@ async def upload_pdf(file: UploadFile = File(...)):
 
             # Parcourt TOUTES les pages (auparavant limité aux 5 premières, ce
             # qui tronquait silencieusement tout document plus long). Une page
-            # individuellement illisible (scan sans OCR, page corrompue) est
-            # ignorée sans interrompre l'extraction des autres pages.
+            # individuellement illisible par PyPDF2 (scan/image sans couche
+            # texte, page corrompue) déclenche un fallback OCR SUR CETTE SEULE
+            # PAGE avant d'être comptée comme vide — jamais systématique : le
+            # rendu image + OCR est coûteux en temps, donc réservé aux pages
+            # où l'extraction native a échoué.
             page_texts = []
             failed_pages = 0
-            for page in pdf_reader.pages:
+            ocr_pages = 0
+            for page_num, page in enumerate(pdf_reader.pages, start=1):
                 try:
                     page_text = page.extract_text()
                 except Exception:
                     page_text = None
+
+                if not page_text and OCR_AVAILABLE:
+                    try:
+                        images = convert_from_bytes(content, first_page=page_num, last_page=page_num, dpi=200)
+                        if images:
+                            ocr_text = pytesseract.image_to_string(images[0], lang="fra+eng")
+                            if ocr_text and ocr_text.strip():
+                                page_text = ocr_text
+                                ocr_pages += 1
+                    except Exception as ocr_err:
+                        print(f"[upload-pdf] OCR échoué sur la page {page_num} de {file.filename}: {ocr_err}")
+
                 if page_text:
                     page_texts.append(page_text)
                 else:
                     failed_pages += 1
             text = " ".join(page_texts)
             print(f"[upload-pdf] {file.filename}: {len(pdf_reader.pages)} page(s), "
-                  f"{failed_pages} page(s) sans texte extrait, {len(text)} caractères extraits au total")
+                  f"{failed_pages} page(s) sans texte extrait, {ocr_pages} page(s) récupérée(s) par OCR, "
+                  f"{len(text)} caractères extraits au total")
 
             if not text:
                 raise HTTPException(

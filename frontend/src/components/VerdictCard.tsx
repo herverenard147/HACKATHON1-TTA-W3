@@ -1,9 +1,26 @@
 import React, { useState } from 'react';
-import { Share2, Check } from 'lucide-react';
+import { Share2, Check, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { shareOrCopy } from '../shareText';
+import { API_BASE_URL } from '../config';
 
-export default function VerdictCard({ result }: { result: any }) {
+export default function VerdictCard({ result, userId }: { result: any; userId: string }) {
   const [copied, setCopied] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState<'up' | 'down' | null>(null);
+
+  const handleFeedback = async (rating: 'up' | 'down') => {
+    if (!result.verification_id || feedbackSent) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verification_id: result.verification_id, user_id: userId, rating }),
+      });
+      if (res.ok) setFeedbackSent(rating);
+    } catch (err) {
+      // Le feedback est une fonctionnalité annexe : un échec silencieux ici
+      // ne doit pas interrompre la lecture du verdict déjà affiché.
+    }
+  };
 
   // Styles dynamiques en fonction du verdict
   let badgeColor = "bg-[#D97706] text-white"; // Ambre par défaut
@@ -62,6 +79,31 @@ export default function VerdictCard({ result }: { result: any }) {
                 .join(', ')}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Feedback 👍/👎 : uniquement actionnable si la vérification a été
+          sauvegardée (verification_id présent, i.e. un user_id a été fourni,
+          voir main.py). Simplement collecté pour l'instant (voir
+          DOCUMENTATION_TECHNIQUE.md), pas encore exploité. */}
+      {result.verification_id && (
+        <div className="mt-6 pt-6 border-t border-[#F1F5F9] flex items-center gap-3">
+          <span className="text-sm text-[#64748B] font-medium">Ce verdict vous a-t-il été utile ?</span>
+          <button
+            onClick={() => handleFeedback('up')}
+            disabled={!!feedbackSent}
+            className={`p-2 rounded-lg transition-all ${feedbackSent === 'up' ? 'bg-[#059669] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'} disabled:cursor-not-allowed`}
+          >
+            <ThumbsUp className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => handleFeedback('down')}
+            disabled={!!feedbackSent}
+            className={`p-2 rounded-lg transition-all ${feedbackSent === 'down' ? 'bg-[#DC2626] text-white' : 'bg-[#F1F5F9] text-[#64748B] hover:bg-[#E2E8F0]'} disabled:cursor-not-allowed`}
+          >
+            <ThumbsDown className="w-4 h-4" />
+          </button>
+          {feedbackSent && <span className="text-xs text-[#94A3B8]">Merci pour votre retour !</span>}
         </div>
       )}
     </div>

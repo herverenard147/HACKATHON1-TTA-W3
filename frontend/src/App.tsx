@@ -99,7 +99,7 @@ export default function App() {
 
           {result && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <VerdictCard result={result} />
+              <VerdictCard result={result} userId={userId} />
               <SourcesAccordion sources={result.sources} />
             </div>
           )}

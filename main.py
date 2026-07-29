@@ -165,6 +165,11 @@ class VerificationResponse(BaseModel):
     # classe) : uniquement peuplé pour les niveaux "amateur"/"expert" (voir
     # build_analyse_text). None pour "debutant"/"intermediaire".
     technical_details: Optional[dict] = None
+    # Id de l'entrée d'historique créée (uniquement si user_id a été fourni,
+    # voir plus bas) - permet au frontend d'associer un feedback 👍/👎 à
+    # cette vérification précise via POST /api/feedback. None si non
+    # sauvegardée (pas de user_id fourni).
+    verification_id: Optional[int] = None
 
 # Variables globales pour l'IA
 embedding_model = None
@@ -312,9 +317,10 @@ def check_claim(request: ClaimRequest):
         # recalculée à la consultation de l'historique (voir GET /api/history).
         # Uniquement si un user_id a été fourni ; sinon la vérification n'est
         # simplement pas persistée (pas d'erreur, comportement anonyme normal).
+        verification_id = None
         if request.user_id:
             try:
-                history_store.save_verification(
+                verification_id = history_store.save_verification(
                     user_id=request.user_id,
                     claim=request.claim,
                     comprehension_level=level,
@@ -335,7 +341,8 @@ def check_claim(request: ClaimRequest):
             badge_text=badge_text,
             analyse_text=analyse_text,
             sources=sources,
-            technical_details=technical_details
+            technical_details=technical_details,
+            verification_id=verification_id
         )
 
     except Exception as e:
@@ -364,6 +371,27 @@ def get_history(user_id: str):
     if not user_id.strip():
         raise HTTPException(status_code=400, detail="Identifiant utilisateur manquant.")
     return history_store.get_history(user_id)
+
+
+class FeedbackRequest(BaseModel):
+    verification_id: int
+    user_id: str
+    rating: str  # "up" ou "down"
+
+
+@app.post("/api/feedback")
+def submit_feedback(request: FeedbackRequest):
+    """Enregistre un feedback 👍/👎 lié à une vérification existante
+    (verification_id renvoyé par check-claim, voir VerificationResponse).
+    Simplement collecté pour exploitation future - aucune logique de
+    classification n'en dépend."""
+    if request.rating not in ("up", "down"):
+        raise HTTPException(status_code=400, detail="rating doit être 'up' ou 'down'.")
+    if not history_store.verification_exists(request.verification_id):
+        raise HTTPException(status_code=404, detail="Vérification introuvable pour cet identifiant.")
+    feedback_id = history_store.save_feedback(request.verification_id, request.user_id, request.rating)
+    return {"feedback_id": feedback_id}
+
 
 @app.post("/api/upload-pdf")
 async def upload_pdf(file: UploadFile = File(...)):

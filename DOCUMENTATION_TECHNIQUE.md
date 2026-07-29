@@ -231,6 +231,7 @@ Voir la section 5 pour l'ordre exact. `models_saved/` (index FAISS + classificat
 - **Ingestion continue du corpus** plutôt qu'un index FAISS statique reconstruit manuellement.
 - **Stratégie multilingue explicite** (traduction automatique du claim vers la langue dominante du corpus avant recherche, ou corpus francophone étoffé) plutôt que de compter sur la robustesse cross-lingue implicite de l'encodeur.
 - **Authentification réelle pour l'historique** (voir section 8 et section 10) : remplacer l'identifiant léger par un vrai compte (session, mot de passe) si l'historique venait à contenir des informations sensibles ou à être exposé publiquement.
+- **Exploiter le feedback 👍/👎** (collecté, voir section 10, non encore utilisé) : par exemple pour repérer les claims où le verdict est jugé insatisfaisant par les utilisateurs (candidats à une revue humaine prioritaire), ou comme signal pour une future itération du classificateur.
 
 ---
 
@@ -257,3 +258,7 @@ Chaque vérification effectuée avec un `user_id` (transmis par le client, voir 
 **Endpoint** : `GET /api/history/{user_id}` renvoie uniquement les entrées de ce `user_id` (filtrage strict `WHERE user_id = ?` côté SQL). Vérifié par exécution réelle avec deux identifiants distincts (3 vérifications pour l'un, 1 pour l'autre) : chaque historique ne contient que ses propres entrées, aucune fuite croisée constatée.
 
 **Partage d'une entrée d'historique** : réutilise le même mécanisme que le bouton "Partager" du verdict (texte formaté copiable dans le presse-papier, ou `navigator.share()` si disponible), factorisé dans `frontend/src/shareText.ts` et partagé entre `VerdictCard.tsx` (verdict qui vient d'être rendu) et `HistoryPanel.tsx` (entrée d'historique), au lieu d'être dupliqué.
+
+### Feedback utilisateur (👍/👎)
+
+Chaque verdict affiché propose un bouton 👍/👎, actif uniquement si la vérification a été sauvegardée dans l'historique (`verification_id` renvoyé par `check_claim`, donc uniquement si `user_id` a été fourni). `POST /api/feedback` (`{verification_id, user_id, rating}`, `rating` ∈ `{"up","down"}`) enregistre le retour dans la même base SQLite (`history_store.py`, table `feedback`, clé étrangère vers `verifications.id` — un `verification_id` inexistant est rejeté en 404). **Simplement collecté pour l'instant, non exploité** : aucune boucle de ré-entraînement ni tableau de bord ne consomme encore ces données — piste d'amélioration future (section 9).

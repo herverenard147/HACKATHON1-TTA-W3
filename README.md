@@ -73,9 +73,30 @@ Ce dépôt inclut également les scripts ayant servi à la conception de l'IA (i
 | 3 | `2_build_retrieval.py` | Encode `data/corpus.csv` avec `all-MiniLM-L6-v2` et construit l'index vectoriel FAISS (`models_saved/faiss_index.bin`). |
 | 4 | `4_ingest_documents.py` | Ajoute les documents institutionnels (GIEC AR6, OMM, Banque Mondiale) au corpus avec leurs métadonnées, puis reconstruit l'index FAISS avec l'ensemble enrichi. |
 | 5 *(optionnel)* | `update_corpus.py` | Fusionne `data/corpus_additionnel.csv` (affirmations régionales additionnelles) dans le corpus et reconstruit l'index FAISS. |
-| — | `3_train_classifier.py` | Entraîne la Régression Logistique (`class_weight='balanced'`, `max_iter=1000`) sur `train.csv` / `test.csv` et sauvegarde `models_saved/classifier.joblib`. Indépendant du corpus/FAISS : peut être lancé à tout moment après l'étape 1. |
+| — | `3_train_classifier.py` | Entraîne la Régression Logistique (`class_weight='balanced'`, `C=0.1`, `max_iter=1000`) sur `train.csv` + `val.csv`, évalue une seule fois sur `test.csv`, et sauvegarde `models_saved/classifier.joblib`. Indépendant du corpus/FAISS : peut être lancé à tout moment après l'étape 1. |
 
 > ⚠️ **Attention — ne pas casser le corpus enrichi.** `data/corpus.csv` est déjà fourni dans ce dépôt en version enrichie (Climate-FEVER **+** documents institutionnels **+** métadonnées `institution/title/year/url`). **Ne relance pas `1_prepare_data.py` isolément** : ce script écrase `data/corpus.csv` par une version brute sans métadonnées ni documents institutionnels. Si tu dois régénérer les données depuis zéro, exécute bien la séquence complète `1 → migrate_csv → 2 → 4 → (5)` pour reconstruire un corpus équivalent, sans quoi les sources GIEC/OMM/Banque Mondiale disparaîtront de l'application et les preuves Climate-FEVER afficheront une institution manquante.
+
+---
+
+ Performance mesurée du classificateur
+
+Chiffres obtenus en exécutant réellement `3_train_classifier.py` sur `data/test.csv` (1040 paires claim-evidence, jamais vues pendant l'entraînement ni le réglage des hyperparamètres) :
+
+| Métrique | Valeur mesurée |
+|---|---|
+| **Macro-F1** (global) | **0.53** |
+| F1 — SUPPORTS | 0.64 |
+| F1 — NOT_ENOUGH_INFO | 0.52 |
+| F1 — REFUTES | 0.44 |
+| Accuracy | 0.56 |
+
+**Méthodologie et honnêteté sur ce chiffre :**
+- Le jeu de données provient à 100 % de Climate-FEVER (Wikipedia). Le corpus institutionnel (GIEC/OMM/Banque Mondiale) ne représente que 3 chunks sur ~4870 dans `data/corpus.csv` et ne participe à aucune paire claim-evidence étiquetée — il sert uniquement à la récupération FAISS, jamais à l'entraînement ou à l'évaluation du classificateur.
+- Réglage : `C=0.1` (régularisation L2 renforcée par rapport à `C=1.0` par défaut, qui surapprend sur 1536 features pour ~4830 exemples) sélectionné par grid search sur `data/val.csv`, jamais sur `data/test.csv`. Le modèle final est ensuite réentraîné sur `train.csv + val.csv` et évalué **une seule fois** sur `test.csv`.
+- Pistes testées et **écartées** car elles n'ont pas amélioré le Macro-F1 mesuré : calibration Platt (`CalibratedClassifierCV`, sigmoid) — fait baisser le Macro-F1 test à 0.46 ; rééquilibrage manuel des poids de classes au-delà de `class_weight='balanced'` — aucune configuration testée ne bat `'balanced'` ; repondération post-hoc du seuil de décision (argmax pondéré) — gain apparent sur validation qui ne se généralise pas sur test (signe de surapprentissage au set de validation, taille limitée à 1035 exemples).
+- REFUTES reste la classe la plus difficile (F1=0.44) : le classificateur confond souvent une affirmation qui *contredit* une preuve avec une affirmation qu'elle *confirme*, quand les deux portent sur le même sujet — limite connue d'une approche par similarité d'embeddings sans modélisation explicite de la négation.
+- Ce chiffre (Macro-F1 ≈ 0.53) remplace toute estimation antérieure ~0.72 qui n'apparaissait dans aucun fichier de ce dépôt (README, code, frontend) — elle provenait uniquement du cahier des charges initial du hackathon, pas d'une mesure réelle sur ce jeu de données.
 
 ---
 *Ce projet a été développé dans le cadre du Hackathon "TTA W3" pour proposer une solution frugale (Zéro-GPU) et à fort impact dans la lutte contre la désinformation climatique.*

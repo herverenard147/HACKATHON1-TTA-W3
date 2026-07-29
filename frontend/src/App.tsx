@@ -26,7 +26,11 @@ export default function App() {
       });
       if (!response.ok) throw new Error("Erreur serveur lors de la vérification.");
       const data = await response.json();
-      setResult(data);
+      // On rattache la déclaration vérifiée à `result` (l'API ne la renvoie pas
+      // elle-même) : nécessaire pour que l'export/partage du verdict puisse
+      // citer l'affirmation d'origine sans dépendre du state `claim`, qui peut
+      // changer entre-temps si l'utilisateur retape quelque chose.
+      setResult({ ...data, claim: text });
     } catch (err: any) {
       setError(err.message);
     } finally {

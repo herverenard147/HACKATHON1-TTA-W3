@@ -174,11 +174,6 @@ async def upload_pdf(file: UploadFile = File(...)):
         if is_pdf:
             try:
                 pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-                # On limite aux premières pages pour l'extraction rapide
-                for i in range(min(5, len(pdf_reader.pages))):
-                    page_text = pdf_reader.pages[i].extract_text()
-                    if page_text:
-                        text += page_text + " "
             except Exception:
                 # Erreur de format côté client (PDF corrompu/invalide), pas une
                 # panne serveur : 400 plutôt que 500, avec un message actionnable.
@@ -186,11 +181,45 @@ async def upload_pdf(file: UploadFile = File(...)):
                     status_code=400,
                     detail="Le fichier PDF est illisible ou corrompu. Vérifiez qu'il s'agit bien d'un PDF valide et réessayez."
                 )
+
+            # Parcourt TOUTES les pages (auparavant limité aux 5 premières, ce
+            # qui tronquait silencieusement tout document plus long). Une page
+            # individuellement illisible (scan sans OCR, page corrompue) est
+            # ignorée sans interrompre l'extraction des autres pages.
+            page_texts = []
+            failed_pages = 0
+            for page in pdf_reader.pages:
+                try:
+                    page_text = page.extract_text()
+                except Exception:
+                    page_text = None
+                if page_text:
+                    page_texts.append(page_text)
+                else:
+                    failed_pages += 1
+            text = " ".join(page_texts)
+            print(f"[upload-pdf] {file.filename}: {len(pdf_reader.pages)} page(s), "
+                  f"{failed_pages} page(s) sans texte extrait, {len(text)} caractères extraits au total")
+
+            if not text:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Aucun texte n'a pu être extrait de ce PDF (pages scannées/images sans OCR ?)."
+                )
         else:
             text = content.decode('utf-8')
 
-        # On renvoie les 500 premiers caractères pour préremplir la barre de recherche
-        extracted = text[:500] + ("..." if len(text) > 500 else "")
+        # Le champ extracted_text préremplit la barre de claim (pas un
+        # visualiseur de document) : on renvoie un aperçu court plutôt que le
+        # texte intégral, mais en échantillonnant début ET fin du document
+        # extrait (pas seulement les premiers caractères) pour rester
+        # représentatif d'un document long.
+        HEAD, TAIL = 350, 150
+        if len(text) <= HEAD + TAIL:
+            extracted = text
+        else:
+            extracted = text[:HEAD].rstrip() + " [...] " + text[-TAIL:].lstrip()
+
         return {"extracted_text": extracted.strip()}
     except HTTPException:
         raise

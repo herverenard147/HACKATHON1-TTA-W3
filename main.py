@@ -11,7 +11,16 @@ import PyPDF2
 import io
 import os
 from typing import List, Optional
-from relevance_filter import is_relevance_uncertain
+from relevance_filter import is_relevance_uncertain, extract_entities
+
+# Poids additif appliqué au score cosinus d'une source candidate quand sa zone
+# géographique (déduite du même lexique que relevance_filter.py) recoupe la
+# zone demandée par l'utilisateur. Calibré empiriquement : les chunks
+# institutionnels pertinents mais peu représentés dans le corpus (3 sur ~4870)
+# se classent souvent autour de 0.10-0.15 sous les meilleurs chunks Climate-FEVER
+# génériques (score cosinus) ; ce boost suffit à les faire remonter dans le
+# top-k affiché sans écraser un score sémantique nettement supérieur.
+ZONE_GEO_BOOST = 0.15
 
 app = FastAPI(
     title="TERRAVA-AI API",
@@ -130,8 +139,40 @@ def check_claim(request: ClaimRequest):
         # Préparation des sources
         sources = []
         if similarity_score >= 0.20:
-            for i in range(k):
-                row = corpus_df.iloc[indices[0][i]]
+            # Sélection des sources à AFFICHER (top-k). Par défaut, identique à
+            # avant : les k meilleurs candidats du retrieval sémantique déjà
+            # effectué ci-dessus (indices/distances), sans aucun changement.
+            #
+            # Si zone_geo contient au moins une entité géographique reconnue
+            # (même lexique que relevance_filter.py), on repondère un pool de
+            # candidats plus large en ajoutant ZONE_GEO_BOOST au score cosinus
+            # des candidats dont l'evidence mentionne cette zone, puis on
+            # retrie et reprend les k meilleurs. C'est un second passage
+            # strictement APRÈS le choix du top-1 utilisé pour le seuil
+            # anti-hallucination et la classification (inchangés ci-dessus) :
+            # zone_geo ne peut donc jamais faire basculer le verdict, il
+            # affecte uniquement quelles sources complémentaires sont mises
+            # en avant. Si zone_geo n'est pas reconnu (valeur par défaut,
+            # faute de frappe, zone hors lexique), aucune repondération n'a
+            # lieu et le comportement reste strictement identique à avant.
+            source_indices = [int(i) for i in indices[0][:k]]
+            zone_entities = extract_entities(request.zone_geo)
+            if zone_entities:
+                pool_size = len(corpus_df)  # corpus institutionnel réduit (~4870 lignes) : un re-scan complet reste négligeable en coût
+                pool_distances, pool_indices = index.search(c_emb, pool_size)
+                candidates = []
+                for idx, score in zip(pool_indices[0], pool_distances[0]):
+                    idx = int(idx)
+                    evidence_text = str(corpus_df.iloc[idx]['evidence'])
+                    boosted_score = float(score)
+                    if zone_entities & extract_entities(evidence_text):
+                        boosted_score += ZONE_GEO_BOOST
+                    candidates.append((boosted_score, idx))
+                candidates.sort(key=lambda pair: pair[0], reverse=True)
+                source_indices = [idx for _, idx in candidates[:k]]
+
+            for idx in source_indices:
+                row = corpus_df.iloc[idx]
                 evidence_text = str(row['evidence'])
                 sources.append(Source(
                     institution=str(row.get('institution', 'Source Inconnue')),
